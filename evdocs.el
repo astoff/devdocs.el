@@ -1,4 +1,4 @@
-;;; evdocs.el --- Emacs viewer for DevDocs  -*- lexical-binding: t -*-
+;;; evdocs.el --- Emacs viewer for DevDocs -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2021 Augusto Stoffel
 
@@ -25,13 +25,18 @@
 
 ;;; Code:
 
+(require 'seq)
+(require 'shr)
+(eval-when-compile
+  (require 'let-alist))
+
 (defgroup evdocs nil
   "Emacs viewer for DevDocs."
   :group 'help
   :prefix "evdocs-")
 
 (defcustom evdocs-current-docs nil
-  "A list of DevDocs documents relevant for the current buffer."
+  "A list of documents relevant to the current buffer."
   :local t
   :type '(list string))
 
@@ -45,46 +50,57 @@
 (defvar evdocs-cdn-url "https://documents.devdocs.io"
   "Location of the DevDocs CDN.")
 
-;;; Manage documentation
+(defcustom evdocs-timeout 300
+  "Number of seconds to keep cached document indexes.")
 
-(defvar evdocs--manifest nil)
+(defcustom evdocs-separator " » "
+  "String used to format a documentation location, e.g. in header line.")
 
-(defun evdocs--manifest (&optional refresh)
-  "Return a hash table of documents available from DevDocs."
-  (when (or refresh (not evdocs--manifest))
-    (let ((tbl (make-hash-table :test 'equal)))
-      (with-temp-buffer
-        (url-insert-file-contents (format "%s/docs.json" evdocs-site-url))
-        (seq-doseq (it (json-read))
-          (puthash (alist-get 'slug it) it tbl))
-        (setq evdocs--manifest tbl))))
-  evdocs--manifest)
+;;; Documentation management
+
+(defvar evdocs--doc-metadata (make-hash-table :test 'equal)
+  "A hash table mapping document slugs to their metadata.
+To be accessed through the function `evdocs--doc-metadata'.")
+
+(defun evdocs--doc-metadata (doc &optional refresh)
+  "Return the metadata for a document DOC.
+Also populates `evdocs--doc-metadata' if necessary, either from
+data on disk if REFRESH is nil, or from freshly downloaded data
+otherwise."
+  (when (or refresh (hash-table-empty-p evdocs--doc-metadata))
+    (let* ((file (expand-file-name "docs.json" evdocs-data-dir))
+           (docs (if (or refresh (not (file-exists-p file)))
+                     (with-temp-file file
+                       (url-insert-file-contents (format "%s/docs.json" evdocs-site-url))
+                       (json-read))
+                   (json-read-file file))))
+      (clrhash evdocs--doc-metadata)
+      (seq-doseq (doc docs)
+        (puthash (alist-get 'slug doc) doc evdocs--doc-metadata))))
+  (gethash doc evdocs--doc-metadata))
+
+(defun evdocs--doc-title (doc)
+  "Title of document with slug DOC"
+  (let-alist (evdocs--doc-metadata doc)
+    (if .version (concat .name " " .version) .name)))
+
+(defun evdocs--read-document (prompt &optional pred multiple refresh)
+  "Query interactively for a DevDocs document."
+  (evdocs--doc-metadata nil refresh) ;; Maybe initialize and refresh
+  (let (cands)
+    (maphash (lambda (k _)
+               (when (or (not pred) (funcall pred k))
+                 (push (cons (evdocs--doc-title k) k) cands)))
+             evdocs--doc-metadata)
+    (if multiple
+        (delq nil (mapcar (lambda (s) (cdr (assoc s cands)))
+                          (completing-read-multiple prompt cands)))
+      (cdr (assoc (completing-read prompt cands nil t) cands)))))
 
 (defun evdocs--installed-p (doc)
   "Non-nil if DOC is installed."
   (file-exists-p
    (expand-file-name "metadata" (expand-file-name doc evdocs-data-dir))))
-
-(defun evdocs--doc-title (doc)
-  "Title of document with slug DOC"
-  (let-alist (gethash doc (evdocs--manifest))
-    (if .version (concat .name " " .version) .name)))
-
-(defun evdocs--read-document (prompt &optional pred multiple)
-  "Query interactively for a DevDocs document."
-  (let (cands)
-    (maphash (lambda (k v)
-               (when (or (not pred) (funcall pred k))
-                 (push (cons (evdocs--doc-title k) k) cands)))
-             (evdocs--manifest))
-    (if multiple
-        ;; (thread-last (completing-read-multiple prompt cands)
-        ;;   (mapcar (lambda (s) (cdr (assoc s cands))))
-        ;;   (delq nil)
-        ;;   (delete-dups))
-        (delq nil (mapcar (lambda (s) (cdr (assoc s cands)))
-                          (completing-read-multiple prompt cands)))
-      (cdr (assoc (completing-read prompt cands nil t) cands)))))
 
 (defun evdocs-delete (doc)
   "Delete DevDocs documentation.
@@ -103,7 +119,8 @@ DOC is a document slug."
 DOC is a document slug."
   (interactive (list (evdocs--read-document
                       "Install documentation: "
-                      (lambda (s) (not (evdocs--installed-p s))))))
+                      (lambda (s) (not (evdocs--installed-p s)))
+                      nil 'refresh)))
   (let ((temp (make-temp-file "devdocs-" t)))
     (with-temp-buffer
       (url-insert-file-contents (format "%s/%s/db.json" evdocs-cdn-url doc))
@@ -114,9 +131,9 @@ DOC is a document slug."
     (url-copy-file (format "%s/%s/index.json" evdocs-cdn-url doc)
                    (expand-file-name "index.json" temp))    
     (with-temp-file (expand-file-name "metadata" temp)
-      (prin1 (gethash doc (evdocs--manifest))
-             (current-buffer)))
+      (prin1 (evdocs--doc-metadata doc) (current-buffer)))
     (rename-file temp (expand-file-name doc evdocs-data-dir) t)
+    (clrhash evdocs--index)
     (message "Documentation for `%s' installed." doc)))
 
 ;;; Manipulating a single document
