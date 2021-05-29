@@ -51,10 +51,15 @@
   "Location of the DevDocs CDN.")
 
 (defcustom evdocs-timeout 300
-  "Number of seconds to keep cached document indexes.")
+  "Number of seconds to keep cached document indexes."
+  :type 'number)
 
 (defcustom evdocs-separator " » "
   "String used to format a documentation location, e.g. in header line.")
+
+(defvar evdocs--index (make-hash-table :test 'equal)
+  "A hash table to cache document indices.
+To be accessed through the function `evdocs--index'.")
 
 ;;; Documentation management
 
@@ -64,13 +69,14 @@ To be accessed through the function `evdocs--doc-metadata'.")
 
 (defun evdocs--doc-metadata (doc &optional refresh)
   "Return the metadata for a document DOC.
-Also populates `evdocs--doc-metadata' if necessary, either from
-data on disk if REFRESH is nil, or from freshly downloaded data
-otherwise."
+Also populates the variable `evdocs--doc-metadata' if necessary,
+either from data on disk if REFRESH is nil, or from freshly
+downloaded data otherwise."
   (when (or refresh (hash-table-empty-p evdocs--doc-metadata))
     (let* ((file (expand-file-name "docs.json" evdocs-data-dir))
            (docs (if (or refresh (not (file-exists-p file)))
                      (with-temp-file file
+                       (make-directory (file-name-directory file) t)
                        (url-insert-file-contents (format "%s/docs.json" evdocs-site-url))
                        (json-read))
                    (json-read-file file))))
@@ -136,60 +142,47 @@ DOC is a document slug."
     (clrhash evdocs--index)
     (message "Documentation for `%s' installed." doc)))
 
-;;; Manipulating a single document
+;;; Document indexes
 
-(defvar evdocs--doc-index (make-hash-table))
+(defvar evdocs--index (make-hash-table :test 'equal)
+  "A hash table to cache document indices.")
 
-(defun evdocs--doc-index (doc)
-  (or (gethash doc evdocs--doc-index)
-      (puthash doc
-               (json-read-file (expand-file-name (concat doc "/index.json")
-                                                 evdocs-data-dir))
-               evdocs--doc-index)))
-
-(defun evdocs--entries (doc)
-  "Return a list of entries for document DOC."
-  (mapcar (let ((docid (cons 'doc doc)))
-            (lambda (entry)
-              (let-alist entry
-                (cons (concat .type ": " .name) (cons docid entry)))))
-          (alist-get 'entries (evdocs--doc-index doc))))
-
-(defvar evdocs--entries (make-hash-table))
-
-(defun evdocs--entries (doc)
-  "Return a list of entries for document DOC."
-  (or (gethash doc evdocs--entries)
-      (puthash doc
-               (seq-map-indexed
-                (let ((docid (cons 'doc doc)))
-                  (lambda (entry i)
-                    (let-alist entry
-                      (thread-last entry
-                        (cons `(index . ,i))
-                        (cons docid)
-                        (cons .name)))))
-                (alist-get 'entries (json-read-file
-                                     (expand-file-name (concat doc "/index.json")
-                                                       evdocs-data-dir))))
-               evdocs--entries)))
-
-
-(defun evdocs--read-entry (prompt)
-  (let* ((cands (mapcan #'evdocs--entries evdocs-current-docs)))
-    (cdr (assoc (completing-read prompt cands nil t) cands))))
+(defun evdocs--index (doc)
+  "Return the index of document DOC.
+This is an alist containing `entries' and `types'."
+  (if-let ((idx (gethash doc evdocs--index)))
+      (prog1 idx
+        (timer-set-time (alist-get 'timer idx) evdocs-timeout))
+    (let* ((docid (cons 'doc doc))
+           (idx (json-read-file (expand-file-name (concat doc "/index.json")
+                                                  evdocs-data-dir)))
+           (entries (alist-get 'entries idx)))
+      (setf (alist-get 'timer idx)
+            (run-at-time evdocs-timeout nil
+                         (lambda () (remhash doc evdocs--index))))
+      (seq-do-indexed (lambda (entry i)
+                        (push `(index . ,i) entry)
+                        (push docid entry)
+                        (aset entries i entry))
+                      entries)
+      (puthash doc idx evdocs--index))))
 
 ;;; Documentation viewer
 
-(defvar-local evdocs--data nil
-  "Alist of data, set buffer-locally when in `evdocs-mode'.")
+(defvar-local evdocs--stack nil
+  "List of viewed entries, set buffer-locally when in `evdocs-mode'.")
+
+(defvar-local evdocs--forward-stack nil
+  "List of viewed entries for `evdocs-go-forward'.")
 
 (defvar evdocs-header-line
-  '(:eval (let-alist evdocs--data
-            (concat (evdocs--doc-title .doc) " » " .type " » " .name))))
+  '(:eval (let-alist (car evdocs--stack)
+            (concat (evdocs--doc-title .doc)
+                    evdocs-separator .type
+                    evdocs-separator .name))))
 
 (define-derived-mode evdocs-mode special-mode "DevDocs"
-  "Mode for displaying DevDocs documents."
+  "Major mode for viewing DevDocs documents."
   (setq-local browse-url-browser-function
               (cons '("\\`[^:]*\\'" . evdocs--browse-url)
                     (if (functionp browse-url-browser-function)
@@ -200,14 +193,35 @@ DOC is a document slug."
         truncate-lines t))
 
 (defun evdocs-goto-target ()
+  "Go to the original position in a DevDocs buffer."
   (interactive)
   (goto-char (point-min))
   (text-property-search-forward 'shr-target-id)
   (beginning-of-line))
 
+(defun evdocs-go-back ()
+  "Go to the previously displayed entry in this DevDocs buffer."
+  (interactive)
+  (unless (cadr evdocs--stack)
+    (user-error "No previous entry"))
+  (push (pop evdocs--stack) evdocs--forward-stack)
+  (evdocs--render (pop evdocs--stack)))
+
+(defun evdocs-go-forward ()
+  "Go to the next entry in this DevDocs buffer."
+  (interactive)
+  (unless (car evdocs--forward-stack)
+    (user-error "No next entry"))
+  (evdocs--render (pop evdocs--forward-stack)))
+
 (let ((map evdocs-mode-map))
   (define-key map [tab] 'forward-button)
-  (define-key map [backtab] 'backward-button))
+  (define-key map [backtab] 'backward-button)
+  (define-key map "l" 'evdocs-go-back)
+  (define-key map "r" 'evdocs-go-forward)
+  (define-key map "." 'evdocs-goto-target))
+
+;;; Rendering
 
 (defun evdocs--path-file (path)
   "Return the non-fragment part of PATH."
@@ -228,13 +242,14 @@ DOC is a document slug."
 (defun evdocs--render (entry)
   "Render a DevDocs documentation entry, returning a buffer.
 
-ENTRY is an alist like those returned by `evdocs--entries',
-possibly with an additional ENTRY.fragment which overrides the
-ENTRY.path fragment part."
+ENTRY is an alist like those in `evdocs--index', possibly with an
+additional ENTRY.fragment which overrides the fragment part of
+ENTRY.path."
   (or (libxml-available-p)
       (error "This function requires Emacs to be compiled with libxml2"))
   (with-current-buffer (get-buffer-create "*devdocs*")
-    (evdocs-mode)
+    (unless (eq major-mode 'evdocs-mode)
+      (evdocs-mode))
     (let-alist entry
       (let ((shr-target-id (or .fragment (evdocs--path-fragment .path)))
             (buffer-read-only nil)
@@ -248,13 +263,13 @@ ENTRY.path fragment part."
            (insert-file-contents file)
            (libxml-parse-html-region (point-min) (point-max)))))
       (set-buffer-modified-p nil)
-      (setq-local evdocs--data entry
-                  evdocs-current-docs (list .doc))
+      (setq-local evdocs-current-docs (list .doc))
+      (push entry evdocs--stack)
       (evdocs-goto-target)
       (current-buffer))))
 
 (defun evdocs--browse-url (url &rest _)
-  (let-alist evdocs--data
+  (let-alist (car evdocs--stack)
     (let* ((dest (evdocs--path-expand url .path))
            (file (evdocs--path-file dest))
            (frag (evdocs--path-fragment dest))
@@ -263,7 +278,7 @@ ENTRY.path fragment part."
                                       (or (string= .path dest)
                                           (string= .path file)))
                                 it))
-                            (evdocs--entries .doc))))
+                            (alist-get 'entries (evdocs--index .doc)))))
       (unless entry (error "Can't find `%s'" dest))
       (when frag (push `(fragment . ,frag) entry))
       (evdocs--render entry))))
