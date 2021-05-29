@@ -1,10 +1,10 @@
-;;; evdocs.el --- Emacs viewer for DevDocs -*- lexical-binding: t -*-
+;;; devdocs.el --- Emacs viewer for DevDocs -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2021 Augusto Stoffel
 
 ;; Author: Augusto Stoffel <arstoffel@gmail.com>
 ;; Keywords: help
-;; URL: https://github.com/astoff/evdocs
+;; URL: https://github.com/astoff/devdocs
 ;; Package-Requires: ((emacs "27.1"))
 ;; Version: 0
 
@@ -23,14 +23,14 @@
 
 ;;; Commentary:
 
-;; evdocs is a documentation viewer similar to Emacs's built-in Info
+;; devdocs is a documentation viewer similar to Emacs's built-in Info
 ;; browser, but geared towards documentation obtained from
 ;; https://devdocs.io.
 
-;; To get started, download some documentation with `evdocs-install`.
+;; To get started, download some documentation with `devdocs-install`.
 ;; This will show the available documents and save the selected one to
 ;; disk.  Once you have the desired documents at hand, use
-;; `evdocs-lookup` to search for entries.
+;; `devdocs-lookup` to search for entries.
 
 ;;; Code:
 
@@ -39,237 +39,237 @@
 (eval-when-compile
   (require 'let-alist))
 
-(defgroup evdocs nil
+(defgroup devdocs nil
   "Emacs viewer for DevDocs."
   :group 'help
-  :prefix "evdocs-")
+  :prefix "devdocs-")
 
-(defcustom evdocs-current-docs nil
+(defcustom devdocs-current-docs nil
   "A list of documents relevant to the current buffer."
   :local t
   :type '(list string))
 
-(defcustom evdocs-data-dir (expand-file-name "devdocs" user-emacs-directory)
+(defcustom devdocs-data-dir (expand-file-name "devdocs" user-emacs-directory)
   "Directory to save documentation files."
   :type 'directory)
 
-(defvar evdocs-site-url "https://devdocs.io"
+(defvar devdocs-site-url "https://devdocs.io"
   "Location of the DevDocs website.")
 
-(defvar evdocs-cdn-url "https://documents.devdocs.io"
+(defvar devdocs-cdn-url "https://documents.devdocs.io"
   "Location of the DevDocs CDN.")
 
-(defcustom evdocs-timeout 300
+(defcustom devdocs-timeout 300
   "Number of seconds to keep cached document indexes."
   :type 'number)
 
-(defcustom evdocs-separator " » "
+(defcustom devdocs-separator " » "
   "String used to format a documentation location, e.g. in header line."
   :type 'string)
 
-(defvar evdocs--index (make-hash-table :test 'equal)
+(defvar devdocs--index (make-hash-table :test 'equal)
   "A hash table to cache document indices.
-To be accessed through the function `evdocs--index'.")
+To be accessed through the function `devdocs--index'.")
 
-(defvar evdocs-history nil
+(defvar devdocs-history nil
   "History of documentation entries.")
 
 ;;; Documentation management
 
-(defvar evdocs--doc-metadata (make-hash-table :test 'equal)
+(defvar devdocs--doc-metadata (make-hash-table :test 'equal)
   "A hash table mapping document slugs to their metadata.
-To be accessed through the function `evdocs--doc-metadata'.")
+To be accessed through the function `devdocs--doc-metadata'.")
 
-(defun evdocs--doc-metadata (doc &optional refresh)
+(defun devdocs--doc-metadata (doc &optional refresh)
   "Return the metadata for a document DOC.
-Also populates the variable `evdocs--doc-metadata' if necessary,
+Also populates the variable `devdocs--doc-metadata' if necessary,
 either from data on disk if REFRESH is nil, or from freshly
 downloaded data otherwise."
-  (when (or refresh (hash-table-empty-p evdocs--doc-metadata))
-    (let* ((file (expand-file-name "docs.json" evdocs-data-dir))
+  (when (or refresh (hash-table-empty-p devdocs--doc-metadata))
+    (let* ((file (expand-file-name "docs.json" devdocs-data-dir))
            (docs (if (or refresh (not (file-exists-p file)))
                      (with-temp-file file
                        (make-directory (file-name-directory file) t)
-                       (url-insert-file-contents (format "%s/docs.json" evdocs-site-url))
+                       (url-insert-file-contents (format "%s/docs.json" devdocs-site-url))
                        (json-read))
                    (json-read-file file))))
-      (clrhash evdocs--doc-metadata)
+      (clrhash devdocs--doc-metadata)
       (seq-doseq (doc docs)
-        (puthash (alist-get 'slug doc) doc evdocs--doc-metadata))))
-  (gethash doc evdocs--doc-metadata))
+        (puthash (alist-get 'slug doc) doc devdocs--doc-metadata))))
+  (gethash doc devdocs--doc-metadata))
 
-(defun evdocs--doc-title (doc)
+(defun devdocs--doc-title (doc)
   "Title of document with slug DOC."
-  (let-alist (evdocs--doc-metadata doc)
+  (let-alist (devdocs--doc-metadata doc)
     (if .version (concat .name " " .version) .name)))
 
-(defun evdocs--read-document (prompt &optional predicate multiple refresh)
+(defun devdocs--read-document (prompt &optional predicate multiple refresh)
   "Query interactively for a DevDocs document.
 PROMPT and PREDICATE as `completing-read'.
 MULTIPLE, if non-nil, allows selecting multiple documents.
 REFRESH, if non-nil, downloads the DevDocs document list anew."
-  (evdocs--doc-metadata nil refresh) ;; Maybe initialize and refresh
+  (devdocs--doc-metadata nil refresh) ;; Maybe initialize and refresh
   (let (cands)
     (maphash (lambda (k _)
                (when (or (not predicate) (funcall predicate k))
-                 (push (cons (evdocs--doc-title k) k) cands)))
-             evdocs--doc-metadata)
+                 (push (cons (devdocs--doc-title k) k) cands)))
+             devdocs--doc-metadata)
     (unless cands (user-error "No documents"))
     (if multiple
         (delq nil (mapcar (lambda (s) (cdr (assoc s cands)))
                           (completing-read-multiple prompt cands)))
       (cdr (assoc (completing-read prompt cands nil t) cands)))))
 
-(defun evdocs--installed-p (doc)
+(defun devdocs--installed-p (doc)
   "Non-nil if DOC is installed."
   (file-exists-p
-   (expand-file-name "metadata" (expand-file-name doc evdocs-data-dir))))
+   (expand-file-name "metadata" (expand-file-name doc devdocs-data-dir))))
 
-(defun evdocs-delete (doc)
+(defun devdocs-delete (doc)
   "Delete DevDocs documentation.
 DOC is a document slug."
-  (interactive (list (evdocs--read-document "Delete documentation: "
-                                            #'evdocs--installed-p)))
+  (interactive (list (devdocs--read-document "Delete documentation: "
+                                            #'devdocs--installed-p)))
   (let ((dest (file-name-as-directory
-               (expand-file-name doc evdocs-data-dir))))
+               (expand-file-name doc devdocs-data-dir))))
     (if (and (file-directory-p dest)
-             (file-in-directory-p dest evdocs-data-dir))
+             (file-in-directory-p dest devdocs-data-dir))
         (delete-directory dest t t)
       (user-error (format "Documentation for `%s' is not installed" doc)))))
 
-(defun evdocs-install (doc)
+(defun devdocs-install (doc)
   "Download and install DevDocs documentation.
 DOC is a document slug."
-  (interactive (list (evdocs--read-document
+  (interactive (list (devdocs--read-document
                       "Install documentation: "
-                      (lambda (s) (not (evdocs--installed-p s)))
+                      (lambda (s) (not (devdocs--installed-p s)))
                       nil 'refresh)))
   (let ((temp (make-temp-file "devdocs-" t)))
     (with-temp-buffer
-      (url-insert-file-contents (format "%s/%s/db.json" evdocs-cdn-url doc))
+      (url-insert-file-contents (format "%s/%s/db.json" devdocs-cdn-url doc))
       (seq-doseq (entry (json-read))
         (with-temp-file (expand-file-name
                          (url-hexify-string (format "%s.html" (car entry))) temp)
           (insert (cdr entry)))))
-    (url-copy-file (format "%s/%s/index.json" evdocs-cdn-url doc)
+    (url-copy-file (format "%s/%s/index.json" devdocs-cdn-url doc)
                    (expand-file-name "index.json" temp))
     (with-temp-file (expand-file-name "metadata" temp)
-      (prin1 (evdocs--doc-metadata doc) (current-buffer)))
-    (rename-file temp (expand-file-name doc evdocs-data-dir) t)
-    (clrhash evdocs--index)
-    (message "Installed %s documentation" (evdocs--doc-title doc))))
+      (prin1 (devdocs--doc-metadata doc) (current-buffer)))
+    (rename-file temp (expand-file-name doc devdocs-data-dir) t)
+    (clrhash devdocs--index)
+    (message "Installed %s documentation" (devdocs--doc-title doc))))
 
 ;;; Document indexes
 
-(defun evdocs--index (doc)
+(defun devdocs--index (doc)
   "Return the index of document DOC.
 This is an alist containing `entries' and `types'."
-  (if-let ((idx (gethash doc evdocs--index)))
+  (if-let ((idx (gethash doc devdocs--index)))
       (prog1 idx
-        (timer-set-time (alist-get 'timer idx) evdocs-timeout))
+        (timer-set-time (alist-get 'timer idx) devdocs-timeout))
     (let* ((docid (cons 'doc doc))
            (idx (json-read-file (expand-file-name (concat doc "/index.json")
-                                                  evdocs-data-dir)))
+                                                  devdocs-data-dir)))
            (entries (alist-get 'entries idx)))
       (setf (alist-get 'timer idx)
-            (run-at-time evdocs-timeout nil
-                         (lambda () (remhash doc evdocs--index))))
+            (run-at-time devdocs-timeout nil
+                         (lambda () (remhash doc devdocs--index))))
       (seq-do-indexed (lambda (entry i)
                         (push `(index . ,i) entry)
                         (push docid entry)
                         (aset entries i entry))
                       entries)
-      (puthash doc idx evdocs--index))))
+      (puthash doc idx devdocs--index))))
 
 ;;; Documentation viewer
 
-(defvar-local evdocs--stack nil
-  "List of viewed entries, set buffer-locally when in `evdocs-mode'.")
+(defvar-local devdocs--stack nil
+  "List of viewed entries, set buffer-locally when in `devdocs-mode'.")
 
-(defvar-local evdocs--forward-stack nil
-  "List of viewed entries for `evdocs-go-forward'.")
+(defvar-local devdocs--forward-stack nil
+  "List of viewed entries for `devdocs-go-forward'.")
 
-(defvar evdocs-header-line
-  '(:eval (let-alist (car evdocs--stack)
-            (concat (evdocs--doc-title .doc)
-                    evdocs-separator .type
-                    evdocs-separator .name))))
+(defvar devdocs-header-line
+  '(:eval (let-alist (car devdocs--stack)
+            (concat (devdocs--doc-title .doc)
+                    devdocs-separator .type
+                    devdocs-separator .name))))
 
-(define-derived-mode evdocs-mode special-mode "DevDocs"
+(define-derived-mode devdocs-mode special-mode "DevDocs"
   "Major mode for viewing DevDocs documents."
   (setq-local browse-url-browser-function
-              (cons '("\\`[^:]*\\'" . evdocs--browse-url)
+              (cons '("\\`[^:]*\\'" . devdocs--browse-url)
                     (if (functionp browse-url-browser-function)
                         `(("." . ,browse-url-browser-function))
                       browse-url-browser-function)))
   (setq buffer-undo-list t
-        header-line-format evdocs-header-line
+        header-line-format devdocs-header-line
         truncate-lines t))
 
-(defun evdocs-goto-target ()
+(defun devdocs-goto-target ()
   "Go to the original position in a DevDocs buffer."
   (interactive)
   (goto-char (point-min))
   (text-property-search-forward 'shr-target-id)
   (beginning-of-line))
 
-(defun evdocs-go-back ()
+(defun devdocs-go-back ()
   "Go to the previously displayed entry in this DevDocs buffer."
   (interactive)
-  (unless (cadr evdocs--stack)
+  (unless (cadr devdocs--stack)
     (user-error "No previous entry"))
-  (push (pop evdocs--stack) evdocs--forward-stack)
-  (evdocs--render (pop evdocs--stack)))
+  (push (pop devdocs--stack) devdocs--forward-stack)
+  (devdocs--render (pop devdocs--stack)))
 
-(defun evdocs-go-forward ()
+(defun devdocs-go-forward ()
   "Go to the next entry in this DevDocs buffer."
   (interactive)
-  (unless (car evdocs--forward-stack)
+  (unless (car devdocs--forward-stack)
     (user-error "No next entry"))
-  (evdocs--render (pop evdocs--forward-stack)))
+  (devdocs--render (pop devdocs--forward-stack)))
 
-(let ((map evdocs-mode-map))
+(let ((map devdocs-mode-map))
   (define-key map [tab] 'forward-button)
   (define-key map [backtab] 'backward-button)
-  (define-key map "l" 'evdocs-go-back)
-  (define-key map "r" 'evdocs-go-forward)
-  (define-key map "." 'evdocs-goto-target))
+  (define-key map "l" 'devdocs-go-back)
+  (define-key map "r" 'devdocs-go-forward)
+  (define-key map "." 'devdocs-goto-target))
 
 ;;; Rendering
 
-(defun evdocs--path-file (path)
+(defun devdocs--path-file (path)
   "Return the non-fragment part of PATH."
   (substring path 0 (string-match "#" path)))
 
-(defun evdocs--path-fragment (path)
+(defun devdocs--path-fragment (path)
   "Return the fragment part of PATH, or nil if absent."
   (when-let ((i (string-match "#" path)))
     (substring path (1+ i))))
 
-(defun evdocs--path-expand (path base)
+(defun devdocs--path-expand (path base)
   "Expand PATH relative to a BASE path."
   (pcase (string-to-char path)
     ('?/ path)
-    ('?# (concat (evdocs--path-file base) path))
+    ('?# (concat (devdocs--path-file base) path))
     (_ (concat (file-name-directory base) path))))
 
-(defun evdocs--render (entry)
+(defun devdocs--render (entry)
   "Render a DevDocs documentation entry, returning a buffer.
 
-ENTRY is an alist like those in the variable `evdocs--index',
+ENTRY is an alist like those in the variable `devdocs--index',
 possibly with an additional ENTRY.fragment which overrides the
 fragment part of ENTRY.path."
   (or (libxml-available-p)
       (error "This function requires Emacs to be compiled with libxml2"))
   (with-current-buffer (get-buffer-create "*devdocs*")
-    (unless (eq major-mode 'evdocs-mode)
-      (evdocs-mode))
+    (unless (eq major-mode 'devdocs-mode)
+      (devdocs-mode))
     (let-alist entry
-      (let ((shr-target-id (or .fragment (evdocs--path-fragment .path)))
+      (let ((shr-target-id (or .fragment (devdocs--path-fragment .path)))
             (buffer-read-only nil)
             (file (expand-file-name (format "%s/%s.html" .doc (url-hexify-string
-                                                               (evdocs--path-file .path)))
-                                    evdocs-data-dir)))
+                                                               (devdocs--path-file .path)))
+                                    devdocs-data-dir)))
         (erase-buffer)
         ;; TODO: cl-progv here for shr settings?
         (shr-insert-document
@@ -277,31 +277,31 @@ fragment part of ENTRY.path."
            (insert-file-contents file)
            (libxml-parse-html-region (point-min) (point-max)))))
       (set-buffer-modified-p nil)
-      (setq-local evdocs-current-docs (list .doc))
-      (push entry evdocs--stack)
-      (evdocs-goto-target)
+      (setq-local devdocs-current-docs (list .doc))
+      (push entry devdocs--stack)
+      (devdocs-goto-target)
       (current-buffer))))
 
-(defun evdocs--browse-url (url &rest _)
+(defun devdocs--browse-url (url &rest _)
   "A suitable `browse-url-browser-function' for `devdocs-mode'.
 URL can be an internal link in a DevDocs document."
-  (let-alist (car evdocs--stack)
-    (let* ((dest (evdocs--path-expand url .path))
-           (file (evdocs--path-file dest))
-           (frag (evdocs--path-fragment dest))
+  (let-alist (car devdocs--stack)
+    (let* ((dest (devdocs--path-expand url .path))
+           (file (devdocs--path-file dest))
+           (frag (devdocs--path-fragment dest))
            (entry (seq-some (lambda (it)
                               (when (let-alist it
                                       (or (string= .path dest)
                                           (string= .path file)))
                                 it))
-                            (alist-get 'entries (evdocs--index .doc)))))
+                            (alist-get 'entries (devdocs--index .doc)))))
       (unless entry (error "Can't find `%s'" dest))
       (when frag (push `(fragment . ,frag) entry))
-      (evdocs--render entry))))
+      (devdocs--render entry))))
 
 ;;; Lookup command
 
-(defun evdocs--entries (doc)
+(defun devdocs--entries (doc)
   "A list of entries in DOC, as propertized strings."
   (seq-map (lambda (it)
              (let ((s (let-alist it
@@ -309,53 +309,53 @@ URL can be an internal link in a DevDocs document."
                         (format #("%s\0%c%s" 2 7
                                   (invisible t rear-nonsticky t cursor-intangible t))
                                 .name .index .doc))))
-               (prog1 s (put-text-property 0 1 'evdocs--data it s))))
-           (alist-get 'entries (evdocs--index doc))))
+               (prog1 s (put-text-property 0 1 'devdocs--data it s))))
+           (alist-get 'entries (devdocs--index doc))))
 
-(defun evdocs--get-data (str)
+(defun devdocs--get-data (str)
   "Get data stored as a string property in STR."
-  (get-text-property 0 'evdocs--data str))
+  (get-text-property 0 'devdocs--data str))
 
-(defun evdocs--annotate (cand)
-  "Return an annotation for `evdocs--read-entry' candidate CAND."
-  (let-alist (evdocs--get-data cand)
+(defun devdocs--annotate (cand)
+  "Return an annotation for `devdocs--read-entry' candidate CAND."
+  (let-alist (devdocs--get-data cand)
     (concat " " (propertize " " 'display '(space :align-to 40))
-     (evdocs--doc-title .doc) evdocs-separator .type)))
+     (devdocs--doc-title .doc) devdocs-separator .type)))
 
-(defun evdocs--read-entry (prompt)
+(defun devdocs--read-entry (prompt)
   "Read the name of an entry in a document, using PROMPT.
-All entries of `evdocs-current-docs' are listed."
-  (let* ((cands (mapcan #'evdocs--entries evdocs-current-docs))
+All entries of `devdocs-current-docs' are listed."
+  (let* ((cands (mapcan #'devdocs--entries devdocs-current-docs))
          (metadata '(metadata
-                     (category . evdocs)
-                     (annotation-function . evdocs--annotate)))
+                     (category . devdocs)
+                     (annotation-function . devdocs--annotate)))
          (coll (lambda (string predicate action)
                  (if (eq action 'metadata)
                      metadata
                    (complete-with-action action cands string predicate)))))
-    (evdocs--get-data
+    (devdocs--get-data
      (car (member (completing-read prompt coll nil t nil
-                                   'evdocs-history
+                                   'devdocs-history
                                    (thing-at-point 'symbol))
                   cands)))))
 
-(defun evdocs-lookup (&optional ask-docs)
+(defun devdocs-lookup (&optional ask-docs)
   "Look up a DevDocs documentation entry.
 
-Display entries in the documents `evdocs-current-docs' for
+Display entries in the documents `devdocs-current-docs' for
 selection.  With a prefix argument (or, from Lisp, if ASK-DOCS is
 non-nil), first read a list of available documents and set
-`evdocs-current-docs' for this buffer."
+`devdocs-current-docs' for this buffer."
   (interactive "P")
-  (when (or ask-docs (not evdocs-current-docs))
-    (setq-local evdocs-current-docs (evdocs--read-document
+  (when (or ask-docs (not devdocs-current-docs))
+    (setq-local devdocs-current-docs (devdocs--read-document
                                      "Docs for this buffer: "
-                                     #'evdocs--installed-p t)))
-  (let* ((entry (evdocs--read-entry "Go to documentation: "))
-         (buffer (evdocs--render entry)))
+                                     #'devdocs--installed-p t)))
+  (let* ((entry (devdocs--read-entry "Go to documentation: "))
+         (buffer (devdocs--render entry)))
     (with-selected-window (display-buffer buffer)
-      (evdocs-goto-target)
+      (devdocs-goto-target)
       (recenter 0))))
 
-(provide 'evdocs)
-;;; evdocs.el ends here
+(provide 'devdocs)
+;;; devdocs.el ends here
