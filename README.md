@@ -3,7 +3,8 @@ devdocs.el — Emacs viewer for DevDocs
 
 devdocs.el is a documentation viewer similar to the built-in Info
 browser, but geared towards documentation obtained from the [DevDocs]
-website.
+website.  It is available from [GNU ELPA]; to install, type `M-x
+package-install RET devdocs RET`.
 
 To get started, download some documentation with `M-x devdocs-install`.
 This will first query https://devdocs.io for the available documents,
@@ -32,4 +33,5 @@ hyperlinks are opened in the same viewing buffer, and external links
 are opened as `browse-url` normally would.
 
 [DevDocs]: https://devdocs.io
+[GNU ELPA]: https://elpa.gnu.org/packages/devdocs.html
 [dir-local variables]: https://www.gnu.org/software/emacs/manual/html_node/emacs/Directory-Variables.html
