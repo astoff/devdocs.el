@@ -125,6 +125,7 @@ REFRESH, if non-nil, downloads the DevDocs document list anew."
   (file-exists-p
    (expand-file-name "metadata" (expand-file-name doc devdocs-data-dir))))
 
+;;;###autoload
 (defun devdocs-delete (doc)
   "Delete DevDocs documentation.
 DOC is a document slug."
@@ -137,6 +138,7 @@ DOC is a document slug."
         (delete-directory dest t t)
       (user-error (format "Documentation for `%s' is not installed" doc)))))
 
+;;;###autoload
 (defun devdocs-install (doc)
   "Download and install DevDocs documentation.
 DOC is a document slug."
@@ -339,6 +341,7 @@ All entries of `devdocs-current-docs' are listed."
                                    (thing-at-point 'symbol))
                   cands)))))
 
+;;;###autoload
 (defun devdocs-lookup (&optional ask-docs)
   "Look up a DevDocs documentation entry.
 
@@ -359,6 +362,7 @@ non-nil), first read a list of available documents and set
 
 ;;; Compatibility with the old devdocs package
 
+;;;###autoload
 (defun devdocs-search (query)
   "Search for QUERY in the DevDocs website."
   (interactive (list (read-from-minibuffer

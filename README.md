@@ -22,9 +22,8 @@ Alternatively, you can set the `devdocs-current-docs` variable
 directly, say via [dir-local variables] or a mode hook:
 
 ```elisp
-(with-eval-after-load 'evdocs
-  (add-hook 'python-mode-hook
-            (lambda () (add-to-list 'evdocs-current-docs "python~3.9"))))
+(add-hook 'python-mode-hook
+          (lambda () (setq-local devdocs-current-docs '("python~3.9"))))
 ```
 
 In the `*devdocs*` buffer, navigation keys similar to Info and
