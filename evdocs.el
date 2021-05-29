@@ -23,6 +23,15 @@
 
 ;;; Commentary:
 
+;; evdocs is a documentation viewer similar to Emacs's built-in Info
+;; browser, but geared towards documentation obtained from
+;; https://devdocs.io.
+
+;; To get started, download some documentation with `evdocs-install`.
+;; This will show the available documents and save the selected one to
+;; disk.  Once you have the desired documents at hand, use
+;; `evdocs-lookup` to search for entries.
+
 ;;; Code:
 
 (require 'seq)
@@ -247,9 +256,9 @@ This is an alist containing `entries' and `types'."
 (defun evdocs--render (entry)
   "Render a DevDocs documentation entry, returning a buffer.
 
-ENTRY is an alist like those in `evdocs--index', possibly with an
-additional ENTRY.fragment which overrides the fragment part of
-ENTRY.path."
+ENTRY is an alist like those in the variable `evdocs--index',
+possibly with an additional ENTRY.fragment which overrides the
+fragment part of ENTRY.path."
   (or (libxml-available-p)
       (error "This function requires Emacs to be compiled with libxml2"))
   (with-current-buffer (get-buffer-create "*devdocs*")
@@ -274,7 +283,8 @@ ENTRY.path."
       (current-buffer))))
 
 (defun evdocs--browse-url (url &rest _)
-  "A suitable `browse-url-browser-function' for `devdocs-mode'."
+  "A suitable `browse-url-browser-function' for `devdocs-mode'.
+URL can be an internal link in a DevDocs document."
   (let-alist (car evdocs--stack)
     (let* ((dest (evdocs--path-expand url .path))
            (file (evdocs--path-file dest))
