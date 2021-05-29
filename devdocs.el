@@ -357,5 +357,14 @@ non-nil), first read a list of available documents and set
       (devdocs-goto-target)
       (recenter 0))))
 
+;;; Compatibility with the old devdocs package
+
+(defun devdocs-search (query)
+  "Search for QUERY in the DevDocs website."
+  (interactive (list (read-from-minibuffer
+                      (format "Search %s: " devdocs-site-url)
+                      nil nil nil nil (thing-at-point 'symbol))))
+  (browse-url (format "%s/#q=%s" devdocs-site-url (url-hexify-string query))))
+
 (provide 'devdocs)
 ;;; devdocs.el ends here
