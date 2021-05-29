@@ -307,9 +307,8 @@ URL can be an internal link in a DevDocs document."
   "A list of entries in DOC, as propertized strings."
   (seq-map (lambda (it)
              (let ((s (let-alist it
-                        ;; Disambiguate of entries with same .name
-                        (format #("%s\0%c%s" 2 7
-                                  (invisible t rear-nonsticky t cursor-intangible t))
+                        ;; Disambiguation cookie for entries with same .name
+                        (format #("%s\0%c%s" 2 7 (invisible t))
                                 .name .index .doc))))
                (prog1 s (put-text-property 0 1 'devdocs--data it s))))
            (alist-get 'entries (devdocs--index doc))))
@@ -324,6 +323,14 @@ URL can be an internal link in a DevDocs document."
     (concat " " (propertize " " 'display '(space :align-to 40))
      (devdocs--doc-title .doc) devdocs-separator .type)))
 
+(defun devdocs--eat-cookie (&rest _)
+  "Eat the disambiguation cookie in the minibuffer."
+  (let* ((pos (minibuffer-prompt-end))
+         (max (point-max)))
+    (while (and (< pos max) (/= 0 (char-after pos)))
+      (setq pos (1+ pos)))
+    (add-text-properties pos max '(invisible t rear-nonsticky t cursor-intangible t))))
+
 (defun devdocs--read-entry (prompt)
   "Read the name of an entry in a document, using PROMPT.
 All entries of `devdocs-current-docs' are listed."
@@ -334,12 +341,14 @@ All entries of `devdocs-current-docs' are listed."
          (coll (lambda (string predicate action)
                  (if (eq action 'metadata)
                      metadata
-                   (complete-with-action action cands string predicate)))))
-    (devdocs--get-data
-     (car (member (completing-read prompt coll nil t nil
-                                   'devdocs-history
-                                   (thing-at-point 'symbol))
-                  cands)))))
+                   (complete-with-action action cands string predicate))))
+         (cand (minibuffer-with-setup-hook
+                   (lambda ()
+                     (add-hook 'after-change-functions 'devdocs--eat-cookie nil t))
+                   (completing-read prompt coll nil t nil
+                                    'devdocs-history
+                                    (thing-at-point 'symbol)))))
+    (devdocs--get-data (car (member cand cands)))))
 
 ;;;###autoload
 (defun devdocs-lookup (&optional ask-docs)
