@@ -55,11 +55,15 @@
   :type 'number)
 
 (defcustom evdocs-separator " » "
-  "String used to format a documentation location, e.g. in header line.")
+  "String used to format a documentation location, e.g. in header line."
+  :type 'string)
 
 (defvar evdocs--index (make-hash-table :test 'equal)
   "A hash table to cache document indices.
 To be accessed through the function `evdocs--index'.")
+
+(defvar evdocs-history nil
+  "History of documentation entries.")
 
 ;;; Documentation management
 
@@ -86,18 +90,22 @@ downloaded data otherwise."
   (gethash doc evdocs--doc-metadata))
 
 (defun evdocs--doc-title (doc)
-  "Title of document with slug DOC"
+  "Title of document with slug DOC."
   (let-alist (evdocs--doc-metadata doc)
     (if .version (concat .name " " .version) .name)))
 
-(defun evdocs--read-document (prompt &optional pred multiple refresh)
-  "Query interactively for a DevDocs document."
+(defun evdocs--read-document (prompt &optional predicate multiple refresh)
+  "Query interactively for a DevDocs document.
+PROMPT and PREDICATE as `completing-read'.
+MULTIPLE, if non-nil, allows selecting multiple documents.
+REFRESH, if non-nil, downloads the DevDocs document list anew."
   (evdocs--doc-metadata nil refresh) ;; Maybe initialize and refresh
   (let (cands)
     (maphash (lambda (k _)
-               (when (or (not pred) (funcall pred k))
+               (when (or (not predicate) (funcall predicate k))
                  (push (cons (evdocs--doc-title k) k) cands)))
              evdocs--doc-metadata)
+    (unless cands (user-error "No documents"))
     (if multiple
         (delq nil (mapcar (lambda (s) (cdr (assoc s cands)))
                           (completing-read-multiple prompt cands)))
@@ -135,17 +143,14 @@ DOC is a document slug."
                          (url-hexify-string (format "%s.html" (car entry))) temp)
           (insert (cdr entry)))))
     (url-copy-file (format "%s/%s/index.json" evdocs-cdn-url doc)
-                   (expand-file-name "index.json" temp))    
+                   (expand-file-name "index.json" temp))
     (with-temp-file (expand-file-name "metadata" temp)
       (prin1 (evdocs--doc-metadata doc) (current-buffer)))
     (rename-file temp (expand-file-name doc evdocs-data-dir) t)
     (clrhash evdocs--index)
-    (message "Documentation for `%s' installed." doc)))
+    (message "Installed %s documentation" (evdocs--doc-title doc))))
 
 ;;; Document indexes
-
-(defvar evdocs--index (make-hash-table :test 'equal)
-  "A hash table to cache document indices.")
 
 (defun evdocs--index (doc)
   "Return the index of document DOC.
@@ -228,7 +233,7 @@ This is an alist containing `entries' and `types'."
   (substring path 0 (string-match "#" path)))
 
 (defun evdocs--path-fragment (path)
-  "Return the fragment part of path, or nil if absent."
+  "Return the fragment part of PATH, or nil if absent."
   (when-let ((i (string-match "#" path)))
     (substring path (1+ i))))
 
@@ -269,6 +274,7 @@ ENTRY.path."
       (current-buffer))))
 
 (defun evdocs--browse-url (url &rest _)
+  "A suitable `browse-url-browser-function' for `devdocs-mode'."
   (let-alist (car evdocs--stack)
     (let* ((dest (evdocs--path-expand url .path))
            (file (evdocs--path-file dest))
@@ -283,7 +289,53 @@ ENTRY.path."
       (when frag (push `(fragment . ,frag) entry))
       (evdocs--render entry))))
 
+;;; Lookup command
+
+(defun evdocs--entries (doc)
+  "A list of entries in DOC, as propertized strings."
+  (seq-map (lambda (it)
+             (let ((s (let-alist it
+                        ;; Disambiguate of entries with same .name
+                        (format #("%s\0%c%s" 2 7
+                                  (invisible t rear-nonsticky t cursor-intangible t))
+                                .name .index .doc))))
+               (prog1 s (put-text-property 0 1 'evdocs--data it s))))
+           (alist-get 'entries (evdocs--index doc))))
+
+(defun evdocs--get-data (str)
+  "Get data stored as a string property in STR."
+  (get-text-property 0 'evdocs--data str))
+
+(defun evdocs--annotate (cand)
+  "Return an annotation for `evdocs--read-entry' candidate CAND."
+  (let-alist (evdocs--get-data cand)
+    (concat " " (propertize " " 'display '(space :align-to 40))
+     (evdocs--doc-title .doc) evdocs-separator .type)))
+
+(defun evdocs--read-entry (prompt)
+  "Read the name of an entry in a document, using PROMPT.
+All entries of `evdocs-current-docs' are listed."
+  (let* ((cands (mapcan #'evdocs--entries evdocs-current-docs))
+         (metadata '(metadata
+                     (category . evdocs)
+                     (annotation-function . evdocs--annotate)))
+         (coll (lambda (string predicate action)
+                 (if (eq action 'metadata)
+                     metadata
+                   (complete-with-action action cands string predicate)))))
+    (evdocs--get-data
+     (car (member (completing-read prompt coll nil t nil
+                                   'evdocs-history
+                                   (thing-at-point 'symbol))
+                  cands)))))
+
 (defun evdocs-lookup (&optional ask-docs)
+  "Look up a DevDocs documentation entry.
+
+Display entries in the documents `evdocs-current-docs' for
+selection.  With a prefix argument (or, from Lisp, if ASK-DOCS is
+non-nil), first read a list of available documents and set
+`evdocs-current-docs' for this buffer."
   (interactive "P")
   (when (or ask-docs (not evdocs-current-docs))
     (setq-local evdocs-current-docs (evdocs--read-document
