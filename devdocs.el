@@ -101,7 +101,7 @@ downloaded data otherwise."
 (defun devdocs--doc-title (doc)
   "Title of document with slug DOC."
   (let-alist (devdocs--doc-metadata doc)
-    (if .version (concat .name " " .version) .name)))
+    (if (seq-empty-p .version) .name (concat .name " " .version))))
 
 (defun devdocs--read-document (prompt &optional predicate multiple refresh)
   "Query interactively for a DevDocs document.
