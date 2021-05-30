@@ -212,8 +212,8 @@ This is an alist containing `entries' and `types'."
   "Go to the original position in a DevDocs buffer."
   (interactive)
   (goto-char (point-min))
-  (text-property-search-forward 'shr-target-id)
-  (beginning-of-line))
+  (when-let ((match (text-property-search-forward 'shr-target-id shr-target-id t)))
+    (goto-char (prop-match-beginning match))))
 
 (defun devdocs-go-back ()
   "Go to the previously displayed entry in this DevDocs buffer."
@@ -288,12 +288,12 @@ fragment part of ENTRY.path."
     (unless (eq major-mode 'devdocs-mode)
       (devdocs-mode))
     (let-alist entry
-      (let ((shr-target-id (or .fragment (devdocs--path-fragment .path)))
-            (buffer-read-only nil)
+      (let ((buffer-read-only nil)
             (file (expand-file-name (format "%s/%s.html" .doc (url-hexify-string
                                                                (devdocs--path-file .path)))
                                     devdocs-data-dir)))
         (erase-buffer)
+        (setq-local shr-target-id (or .fragment (devdocs--path-fragment .path)))
         ;; TODO: cl-progv here for shr settings?
         (shr-insert-document
          (with-temp-buffer
