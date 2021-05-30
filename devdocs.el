@@ -230,9 +230,30 @@ This is an alist containing `entries' and `types'."
     (user-error "No next entry"))
   (devdocs--render (pop devdocs--forward-stack)))
 
+(defun devdocs-next-entry (count)
+  "Go forward COUNT entries in this document.
+
+Note that this refers to the index order, which may not coincide
+with the order of appearance in the text."
+  (interactive "p")
+  (let-alist (car devdocs--stack)
+    (devdocs--render
+     (or (ignore-error 'args-out-of-range
+           (seq-elt (alist-get 'entries (devdocs--index .doc))
+                    (+ count .index)))
+         (user-error (if (< count 0) "No previous entry" "No next entry"))))))
+
+(defun devdocs-previous-entry (count)
+  "Go backward COUNT entries in this document."
+  (interactive "p")
+  (devdocs-next-entry (- count)))
+
 (let ((map devdocs-mode-map))
   (define-key map [tab] 'forward-button)
   (define-key map [backtab] 'backward-button)
+  (define-key map "g" 'devdocs-lookup)
+  (define-key map "p" 'devdocs-previous-entry)
+  (define-key map "n" 'devdocs-next-entry)
   (define-key map "l" 'devdocs-go-back)
   (define-key map "r" 'devdocs-go-forward)
   (define-key map "." 'devdocs-goto-target))
