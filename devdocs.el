@@ -199,14 +199,11 @@ This is an alist containing `entries' and `types'."
 
 (define-derived-mode devdocs-mode special-mode "DevDocs"
   "Major mode for viewing DevDocs documents."
-  (setq-local browse-url-browser-function
-              (cons '("\\`[^:]*\\'" . devdocs--browse-url)
-                    (if (functionp browse-url-browser-function)
-                        `(("." . ,browse-url-browser-function))
-                      browse-url-browser-function)))
-  (setq buffer-undo-list t
-        header-line-format devdocs-header-line
-        truncate-lines t))
+  (setq-local
+   browse-url-browser-function 'devdocs--browse-url
+   buffer-undo-list t
+   header-line-format devdocs-header-line
+   truncate-lines t))
 
 (defun devdocs-goto-target ()
   "Go to the original position in a DevDocs buffer."
@@ -305,22 +302,25 @@ fragment part of ENTRY.path."
       (devdocs-goto-target)
       (current-buffer))))
 
-(defun devdocs--browse-url (url &rest _)
+(defun devdocs--browse-url (url &rest args)
   "A suitable `browse-url-browser-function' for `devdocs-mode'.
 URL can be an internal link in a DevDocs document."
-  (let-alist (car devdocs--stack)
-    (let* ((dest (devdocs--path-expand url .path))
-           (file (devdocs--path-file dest))
-           (frag (devdocs--path-fragment dest))
-           (entry (seq-some (lambda (it)
-                              (when (let-alist it
-                                      (or (string= .path dest)
-                                          (string= .path file)))
-                                it))
-                            (alist-get 'entries (devdocs--index .doc)))))
-      (unless entry (error "Can't find `%s'" dest))
-      (when frag (push `(fragment . ,frag) entry))
-      (devdocs--render entry))))
+  (if (string-match-p ":" url)
+      (let ((browse-url-browser-function (default-value 'browse-url-browser-function)))
+        (apply #'browse-url url args))
+    (let-alist (car devdocs--stack)
+      (let* ((dest (devdocs--path-expand url .path))
+             (file (devdocs--path-file dest))
+             (frag (devdocs--path-fragment dest))
+             (entry (seq-some (lambda (it)
+                                (when (let-alist it
+                                        (or (string= .path dest)
+                                            (string= .path file)))
+                                  it))
+                              (alist-get 'entries (devdocs--index .doc)))))
+        (unless entry (error "Can't find `%s'" dest))
+        (when frag (push `(fragment . ,frag) entry))
+        (devdocs--render entry)))))
 
 ;;; Lookup command
 
