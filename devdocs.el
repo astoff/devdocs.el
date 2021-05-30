@@ -329,7 +329,9 @@ URL can be an internal link in a DevDocs document."
          (max (point-max)))
     (while (and (< pos max) (/= 0 (char-after pos)))
       (setq pos (1+ pos)))
-    (add-text-properties pos max '(invisible t rear-nonsticky t cursor-intangible t))))
+    (when (< pos max)
+      (add-text-properties pos (next-property-change pos nil max)
+                           '(invisible t rear-nonsticky t)))))
 
 (defun devdocs--read-entry (prompt)
   "Read the name of an entry in a document, using PROMPT.
