@@ -34,6 +34,7 @@
 
 ;;; Code:
 
+(require 'org-src)
 (require 'seq)
 (require 'shr)
 (eval-when-compile
@@ -273,6 +274,16 @@ with the order of appearance in the text."
     ('?# (concat (devdocs--path-file base) path))
     (_ (concat (file-name-directory base) path))))
 
+(defun devdocs--shr-tag-pre (dom)
+  "Insert and fontify pre-tag represented by DOM."
+  (let ((shr-folding-mode 'none) (shr-current-font 'default) start)
+    (shr-ensure-newline)
+    (setq start (point))
+    (shr-generic dom)
+    (when-let ((lang (dom-attr dom 'data-language)))
+      (org-src-font-lock-fontify-block (downcase lang) start (point)))
+    (shr-ensure-newline)))
+
 (defun devdocs--render (entry)
   "Render a DevDocs documentation entry, returning a buffer.
 
@@ -286,6 +297,9 @@ fragment part of ENTRY.path."
       (devdocs-mode))
     (let-alist entry
       (let ((buffer-read-only nil)
+            (shr-external-rendering-functions
+             (cons '(pre . devdocs--shr-tag-pre)
+              shr-external-rendering-functions))
             (file (expand-file-name (format "%s/%s.html" .doc (url-hexify-string
                                                                (devdocs--path-file .path)))
                                     devdocs-data-dir)))
