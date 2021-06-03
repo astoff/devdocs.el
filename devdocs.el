@@ -248,7 +248,7 @@ with the order of appearance in the text."
 (let ((map devdocs-mode-map))
   (define-key map [tab] 'forward-button)
   (define-key map [backtab] 'backward-button)
-  (define-key map "g" 'devdocs-lookup)
+  (define-key map "i" 'devdocs-lookup)
   (define-key map "p" 'devdocs-previous-entry)
   (define-key map "n" 'devdocs-next-entry)
   (define-key map "l" 'devdocs-go-back)
