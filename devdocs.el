@@ -37,6 +37,7 @@
 (require 'org-src)
 (require 'seq)
 (require 'shr)
+(require 'url-expand)
 (eval-when-compile
   (require 'let-alist))
 
@@ -272,7 +273,10 @@ with the order of appearance in the text."
   (pcase (string-to-char path)
     ('?/ path)
     ('?# (concat (devdocs--path-file base) path))
-    (_ (concat (file-name-directory base) path))))
+    (_ (substring ;; ugly!
+        (url-expander-remove-relative-links ;; undocumented function!
+         (concat (file-name-directory base) path))
+        1))))
 
 (defun devdocs--shr-tag-pre (dom)
   "Insert and fontify pre-tag represented by DOM."
