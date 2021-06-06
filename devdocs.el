@@ -41,6 +41,9 @@
 (eval-when-compile
   (require 'let-alist))
 
+(unless (libxml-available-p)
+  (display-warning 'devdocs "This package requires Emacs to be compiled with libxml2"))
+
 (defgroup devdocs nil
   "Emacs viewer for DevDocs."
   :group 'help
@@ -293,8 +296,6 @@ with the order of appearance in the text."
 ENTRY is an alist like those in the variable `devdocs--index',
 possibly with an additional ENTRY.fragment which overrides the
 fragment part of ENTRY.path."
-  (or (libxml-available-p)
-      (error "This function requires Emacs to be compiled with libxml2"))
   (with-current-buffer (get-buffer-create "*devdocs*")
     (unless (eq major-mode 'devdocs-mode)
       (devdocs-mode))
