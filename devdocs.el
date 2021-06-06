@@ -80,6 +80,25 @@ Fontification is done using the `org-src' library, which see."
 (defvar devdocs-history nil
   "History of documentation entries.")
 
+;;; Memoization
+
+(defvar devdocs--cache (make-hash-table :test 'equal)
+  "Hash table used by `devdocs--with-cache'.")
+
+(defmacro devdocs--with-cache (&rest body)
+  "Evaluate BODY with memoization.
+The return value is stored and reused if needed again within the
+time span specified by `devdocs-timeout'."
+  `(if-let ((fun (lambda () ,@body))
+            (data (gethash fun devdocs--cache)))
+       (prog1 (cdr data)
+         (timer-set-time (car data) devdocs-timeout))
+     (let ((val (funcall fun))
+           (timer (run-at-time devdocs-timeout nil
+                               (lambda () (remhash fun devdocs--cache)))))
+       (prog1 val
+         (puthash fun (cons timer val) devdocs--cache)))))
+
 ;;; Documentation management
 
 (defvar devdocs--doc-metadata (make-hash-table :test 'equal)
@@ -94,10 +113,11 @@ downloaded data otherwise."
   (when (or refresh (hash-table-empty-p devdocs--doc-metadata))
     (let* ((file (expand-file-name "docs.json" devdocs-data-dir))
            (docs (if (or refresh (not (file-exists-p file)))
-                     (with-temp-file file
-                       (make-directory (file-name-directory file) t)
-                       (url-insert-file-contents (format "%s/docs.json" devdocs-site-url))
-                       (json-read))
+                     (devdocs--with-cache
+                      (with-temp-file file
+                        (make-directory (file-name-directory file) t)
+                        (url-insert-file-contents (format "%s/docs.json" devdocs-site-url))
+                        (json-read)))
                    (json-read-file file))))
       (clrhash devdocs--doc-metadata)
       (seq-doseq (doc docs)
@@ -164,7 +184,7 @@ DOC is a document slug."
     (with-temp-file (expand-file-name "metadata" temp)
       (prin1 (devdocs--doc-metadata doc) (current-buffer)))
     (rename-file temp (expand-file-name doc devdocs-data-dir) t)
-    (clrhash devdocs--index)
+    (clrhash devdocs--cache)
     (message "Installed %s documentation" (devdocs--doc-title doc))))
 
 ;;; Document indexes
@@ -172,22 +192,17 @@ DOC is a document slug."
 (defun devdocs--index (doc)
   "Return the index of document DOC.
 This is an alist containing `entries' and `types'."
-  (if-let ((idx (gethash doc devdocs--index)))
-      (prog1 idx
-        (timer-set-time (alist-get 'timer idx) devdocs-timeout))
-    (let* ((docid (cons 'doc doc))
-           (idx (json-read-file (expand-file-name (concat doc "/index.json")
-                                                  devdocs-data-dir)))
-           (entries (alist-get 'entries idx)))
-      (setf (alist-get 'timer idx)
-            (run-at-time devdocs-timeout nil
-                         (lambda () (remhash doc devdocs--index))))
-      (seq-do-indexed (lambda (entry i)
-                        (push `(index . ,i) entry)
-                        (push docid entry)
-                        (aset entries i entry))
-                      entries)
-      (puthash doc idx devdocs--index))))
+  (devdocs--with-cache
+   (let* ((docid (cons 'doc doc))
+          (idx (json-read-file (expand-file-name (concat doc "/index.json")
+                                                 devdocs-data-dir)))
+          (entries (alist-get 'entries idx)))
+     (prog1 idx
+       (seq-do-indexed (lambda (entry i)
+                         (push `(index . ,i) entry)
+                         (push docid entry)
+                         (aset entries i entry))
+                       entries)))))
 
 ;;; Documentation viewer
 
