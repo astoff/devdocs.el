@@ -1,9 +1,13 @@
 devdocs.el — Emacs viewer for DevDocs
 =====================================
 
+<a href="http://elpa.gnu.org/packages/devdocs.html"><img alt="GNU ELPA" src="https://elpa.gnu.org/packages/devdocs.svg"/></a>
+<a href="https://melpa.org/#/devdocs"><img alt="MELPA" src="https://melpa.org/packages/devdocs-badge.svg"/></a>
+
 devdocs.el is a documentation viewer similar to the built-in Info
 browser, but geared towards documentation obtained from the [DevDocs]
-website.  It is available from [GNU ELPA]; to install, type `M-x
+website.  The stable version is available from [GNU ELPA] and a
+development version is available from [MELPA]; to install, type `M-x
 package-install RET devdocs RET`.
 
 To get started, download some documentation with `M-x devdocs-install`.
@@ -33,4 +37,5 @@ are opened as `browse-url` normally would.
 
 [DevDocs]: https://devdocs.io
 [GNU ELPA]: https://elpa.gnu.org/packages/devdocs.html
+[MELPA]: https://melpa.org/#/devdocs
 [dir-local variables]: https://www.gnu.org/software/emacs/manual/html_node/emacs/Directory-Variables.html

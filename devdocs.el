@@ -4,7 +4,7 @@
 
 ;; Author: Augusto Stoffel <arstoffel@gmail.com>
 ;; Keywords: help
-;; URL: https://github.com/astoff/devdocs
+;; URL: https://github.com/astoff/devdocs.el
 ;; Package-Requires: ((emacs "27.1"))
 ;; Version: 0.1
 
