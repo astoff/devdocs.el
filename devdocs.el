@@ -69,9 +69,10 @@
   "String used to format a documentation location, e.g. in header line."
   :type 'string)
 
-(defvar devdocs--index (make-hash-table :test 'equal)
-  "A hash table to cache document indices.
-To be accessed through the function `devdocs--index'.")
+(defcustom devdocs-fontify-code-blocks t
+  "Whether to fontify code snippets inside pre tags.
+Fontification is done using the `org-src' library, which see."
+  :type 'boolean)
 
 (defvar devdocs-history nil
   "History of documentation entries.")
@@ -282,7 +283,8 @@ with the order of appearance in the text."
   "Insert and fontify pre-tag represented by DOM."
   (let ((start (point)))
     (shr-tag-pre dom)
-    (when-let ((lang (dom-attr dom 'data-language)))
+    (when-let ((lang (and devdocs-fontify-code-blocks
+                          (dom-attr dom 'data-language))))
       (org-src-font-lock-fontify-block (downcase lang) start (point)))))
 
 (defun devdocs--render (entry)
