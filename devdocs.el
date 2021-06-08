@@ -64,8 +64,8 @@
 (defvar devdocs-cdn-url "https://documents.devdocs.io"
   "Location of the DevDocs CDN.")
 
-(defcustom devdocs-timeout 300
-  "Number of seconds to keep cached document indexes."
+(defcustom devdocs-cache-timeout 900
+  "Number of seconds to keep cached information such as document indexes."
   :type 'number)
 
 (defcustom devdocs-separator " » "
@@ -88,16 +88,22 @@ Fontification is done using the `org-src' library, which see."
 (defmacro devdocs--with-cache (&rest body)
   "Evaluate BODY with memoization.
 The return value is stored and reused if needed again within the
-time span specified by `devdocs-timeout'."
+time span specified by `devdocs-cache-timeout'.
+
+Note that the lexical environment is used to associate BODY to
+its return value; take the necessary precautions."
   `(if-let ((fun (lambda () ,@body))
-            (data (gethash fun devdocs--cache)))
+            (funrep ,(if (< emacs-major-version 28) ;; Cf. bug#32503
+                         '(prin1-to-string fun)
+                       'fun))
+            (data (gethash funrep devdocs--cache)))
        (prog1 (cdr data)
-         (timer-set-time (car data) devdocs-timeout))
+         (timer-set-time (car data) (time-add nil devdocs-cache-timeout)))
      (let ((val (funcall fun))
-           (timer (run-at-time devdocs-timeout nil
-                               (lambda () (remhash fun devdocs--cache)))))
+           (timer (run-at-time devdocs-cache-timeout nil
+                               (lambda () (remhash funrep devdocs--cache)))))
        (prog1 val
-         (puthash fun (cons timer val) devdocs--cache)))))
+         (puthash funrep (cons timer val) devdocs--cache)))))
 
 ;;; Documentation management
 
