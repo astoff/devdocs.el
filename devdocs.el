@@ -392,9 +392,11 @@ URL can be an internal link in a DevDocs document."
       (add-text-properties pos (next-property-change pos nil max)
                            '(invisible t rear-nonsticky t)))))
 
-(defun devdocs--read-entry (prompt)
+(defun devdocs--read-entry (prompt initial-input)
   "Read the name of an entry in a document, using PROMPT.
-All entries of `devdocs-current-docs' are listed."
+All entries of `devdocs-current-docs' are listed.
+
+INITIAL-INPUT is passed to `completing-read'"
   (let* ((cands (mapcan #'devdocs--entries devdocs-current-docs))
          (metadata '(metadata
                      (category . devdocs)
@@ -406,25 +408,27 @@ All entries of `devdocs-current-docs' are listed."
          (cand (minibuffer-with-setup-hook
                    (lambda ()
                      (add-hook 'after-change-functions 'devdocs--eat-cookie nil t))
-                   (completing-read prompt coll nil t nil
+                   (completing-read prompt coll nil t initial-input
                                     'devdocs-history
                                     (thing-at-point 'symbol)))))
     (devdocs--get-data (car (member cand cands)))))
 
 ;;;###autoload
-(defun devdocs-lookup (&optional ask-docs)
+(defun devdocs-lookup (&optional ask-docs initial-input)
   "Look up a DevDocs documentation entry.
 
 Display entries in the documents `devdocs-current-docs' for
 selection.  With a prefix argument (or, from Lisp, if ASK-DOCS is
 non-nil), first read a list of available documents and set
-`devdocs-current-docs' for this buffer."
+`devdocs-current-docs' for this buffer.
+
+If INITIAL-INPUT is not nil, insert it into the minibuffer."
   (interactive "P")
   (when (or ask-docs (not devdocs-current-docs))
     (setq-local devdocs-current-docs (devdocs--read-document
                                      "Docs for this buffer: "
                                      #'devdocs--installed-p t)))
-  (let* ((entry (devdocs--read-entry "Go to documentation: "))
+  (let* ((entry (devdocs--read-entry "Go to documentation: " initial-input))
          (buffer (devdocs--render entry)))
     (with-selected-window (display-buffer buffer)
       (devdocs-goto-target)
