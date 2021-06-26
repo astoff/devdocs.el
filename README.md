@@ -35,6 +35,13 @@ In the `*devdocs*` buffer, navigation keys similar to Info and
 hyperlinks are opened in the same viewing buffer, and external links
 are opened as `browse-url` normally would.
 
+Contributing
+------------
+
+Discussions, suggestions and code contributions are welcome!  Since
+this package is part of GNU ELPA, nontrivial contributions (above 15
+lines of code) require a copyright assignment to the FSF.
+
 [DevDocs]: https://devdocs.io
 [GNU ELPA]: https://elpa.gnu.org/packages/devdocs.html
 [MELPA]: https://melpa.org/#/devdocs
