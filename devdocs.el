@@ -416,10 +416,28 @@ INITIAL-INPUT is passed to `completing-read'"
          (cand (minibuffer-with-setup-hook
                    (lambda ()
                      (add-hook 'after-change-functions 'devdocs--eat-cookie nil t))
-                   (completing-read prompt coll nil t initial-input
-                                    'devdocs-history))))
+                 (completing-read prompt coll nil 'confirm initial-input
+                                  'devdocs-history))))
     (unless (equal cand "") ;; Nothing was chosen by the user
-      (devdocs--get-data (car (member cand cands))))))
+      (if-let ((exact-match (car (member cand cands))))
+          ;; Completion finished with an exact match (either because only one
+          ;; candidate exists or the user explicitely chose it in the
+          ;; completion buffer).
+          (devdocs--get-data exact-match)
+        ;; Else try to see if the confirmed `cand' can be seen as an exact
+        ;; match among other things.
+        ;; For exemple, open "foo" entry if it exists, even if regular
+        ;; completion system also found "foo-p" or "foo-bar" as possible
+        ;; candidates.
+        (if-let ((compstr (format "%s\0" cand)) ;; Null string used as separator
+                 (second-match
+                  (seq-find (lambda (prop)
+                              (string-prefix-p compstr (substring-no-properties prop)))
+                            (all-completions cand cands))))
+            ;; One entry is available for that exact `cand'.
+            (devdocs--get-data second-match)
+          ;; Definitely, we found nothing, this is a wrong candidate.
+          (user-error "No entry found for %s" cand))))))
 
 ;;;###autoload
 (defun devdocs-lookup (&optional ask-docs initial-input)
