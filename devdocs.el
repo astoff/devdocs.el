@@ -230,6 +230,7 @@ This is an alist containing `entries' and `types'."
    browse-url-browser-function 'devdocs--browse-url
    buffer-undo-list t
    header-line-format devdocs-header-line
+   revert-buffer-function 'devdocs--revert-buffer
    truncate-lines t))
 
 (defun devdocs-goto-target ()
@@ -339,6 +340,10 @@ fragment part of ENTRY.path."
       (push entry devdocs--stack)
       (devdocs-goto-target)
       (current-buffer))))
+
+(defun devdocs--revert-buffer (&rest _args)
+  "Refresh DevDocs buffer."
+  (devdocs--render (pop devdocs--stack)))
 
 (defun devdocs--browse-url (url &rest args)
   "A suitable `browse-url-browser-function' for `devdocs-mode'.
