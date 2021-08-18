@@ -402,6 +402,9 @@ URL can be an internal link in a DevDocs document."
 All entries of `devdocs-current-docs' are listed.
 
 INITIAL-INPUT is passed to `completing-read'"
+  (unless initial-input
+    ;; Get thing at point without properties
+    (setq initial-input (thing-at-point 'symbol t)))
   (let* ((cands (mapcan #'devdocs--entries devdocs-current-docs))
          (metadata '(metadata
                      (category . devdocs)
@@ -414,9 +417,9 @@ INITIAL-INPUT is passed to `completing-read'"
                    (lambda ()
                      (add-hook 'after-change-functions 'devdocs--eat-cookie nil t))
                    (completing-read prompt coll nil t initial-input
-                                    'devdocs-history
-                                    (thing-at-point 'symbol)))))
-    (devdocs--get-data (car (member cand cands)))))
+                                    'devdocs-history))))
+    (unless (equal cand "") ;; Nothing was chosen by the user
+      (devdocs--get-data (car (member cand cands))))))
 
 ;;;###autoload
 (defun devdocs-lookup (&optional ask-docs initial-input)
@@ -433,11 +436,11 @@ If INITIAL-INPUT is not nil, insert it into the minibuffer."
     (setq-local devdocs-current-docs (devdocs--read-document
                                      "Docs for this buffer: "
                                      #'devdocs--installed-p t)))
-  (let* ((entry (devdocs--read-entry "Go to documentation: " initial-input))
-         (buffer (devdocs--render entry)))
-    (with-selected-window (display-buffer buffer)
-      (devdocs-goto-target)
-      (recenter 0))))
+  (let ((entry (devdocs--read-entry "Go to documentation: " initial-input)))
+    (when entry ;; Only render an entry if we got one
+      (with-selected-window (display-buffer (devdocs--render entry))
+        (devdocs-goto-target)
+        (recenter 0)))))
 
 ;;; Compatibility with the old devdocs package
 
