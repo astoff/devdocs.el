@@ -23,7 +23,7 @@
 
 ;;; Commentary:
 
-;; devdocs is a documentation viewer similar to Emacs's built-in Info
+;; devdocs.el is a documentation viewer similar to the built-in Info
 ;; browser, but geared towards documentation obtained from
 ;; https://devdocs.io.
 
@@ -50,7 +50,10 @@
   :prefix "devdocs-")
 
 (defcustom devdocs-current-docs nil
-  "A list of documents relevant to the current buffer."
+  "A list of documents relevant to the current buffer.
+This variable is normally set by the `devdocs-lookup' command,
+but you may also wish to set it via a hook or as file or
+directory-local variable."
   :local t
   :type '(list string))
 
@@ -80,6 +83,9 @@ Fontification is done using the `org-src' library, which see."
 (defvar devdocs-history nil
   "History of documentation entries.")
 
+(defconst devdocs--data-format-version 1
+  "Version number of the saved documentation data format.")
+
 ;;; Memoization
 
 (defvar devdocs--cache (make-hash-table :test 'equal)
@@ -107,108 +113,145 @@ its return value; take the necessary precautions."
 
 ;;; Documentation management
 
-(defvar devdocs--doc-metadata (make-hash-table :test 'equal)
-  "A hash table mapping document slugs to their metadata.
-To be accessed through the function `devdocs--doc-metadata'.")
+(defun devdocs--doc-metadata (slug)
+  "Return the metadata of an installed document named SLUG."
+  (let ((file (expand-file-name (concat slug "/metadata") devdocs-data-dir)))
+    (unless (file-exists-p file)
+      (user-error "Document `%s' is not installed" slug))
+    (with-temp-buffer
+      (insert-file-contents file)
+      (let ((metadata (read (current-buffer))))
+        (unless (eq (car metadata) devdocs--data-format-version)
+          (user-error "Please run `devdocs-update-all'"))
+        (cdr metadata)))))
 
-(defun devdocs--doc-metadata (doc &optional refresh)
-  "Return the metadata for a document DOC.
-Also populates the variable `devdocs--doc-metadata' if necessary,
-either from data on disk if REFRESH is nil, or from freshly
-downloaded data otherwise."
-  (when (or refresh (hash-table-empty-p devdocs--doc-metadata))
-    (let* ((file (expand-file-name "docs.json" devdocs-data-dir))
-           (docs (if (or refresh (not (file-exists-p file)))
-                     (devdocs--with-cache
-                      (with-temp-file file
-                        (make-directory (file-name-directory file) t)
-                        (url-insert-file-contents (format "%s/docs.json" devdocs-site-url))
-                        (json-read)))
-                   (json-read-file file))))
-      (clrhash devdocs--doc-metadata)
-      (seq-doseq (doc docs)
-        (puthash (alist-get 'slug doc) doc devdocs--doc-metadata))))
-  (gethash doc devdocs--doc-metadata))
+(defun devdocs--installed-docs ()
+  "Return a list of installed documents."
+  (mapcar #'devdocs--doc-metadata
+          (let ((default-directory devdocs-data-dir))
+            (seq-filter #'file-directory-p
+                        (when (file-directory-p devdocs-data-dir)
+                          (directory-files "." nil "^[^.]"))))))
+
+(defun devdocs--available-docs ()
+  "Return a list of available documents.
+If necessary, download data from `devdocs-site-url'."
+  (devdocs--with-cache
+   (with-temp-buffer
+     (url-insert-file-contents
+      (format "%s/docs.json" devdocs-site-url))
+     (json-read))))
 
 (defun devdocs--doc-title (doc)
-  "Title of document with slug DOC."
-  (let-alist (devdocs--doc-metadata doc)
+  "Title of document DOC.
+DOC is either a metadata alist, or the slug of an installed
+document."
+  (let-alist (if (stringp doc) (devdocs--doc-metadata doc) doc)
     (if (seq-empty-p .version) .name (concat .name " " .version))))
 
-(defun devdocs--read-document (prompt &optional predicate multiple refresh)
+(defun devdocs--read-document (prompt &optional multiple available)
   "Query interactively for a DevDocs document.
-PROMPT and PREDICATE as `completing-read'.
-MULTIPLE, if non-nil, allows selecting multiple documents.
-REFRESH, if non-nil, downloads the DevDocs document list anew."
-  (devdocs--doc-metadata nil refresh) ;; Maybe initialize and refresh
-  (let (cands)
-    (maphash (lambda (k _)
-               (when (or (not predicate) (funcall predicate k))
-                 (push (cons (devdocs--doc-title k) k) cands)))
-             devdocs--doc-metadata)
-    (unless cands (user-error "No documents"))
+
+PROMPT is passed to `completing-read'.
+Non-nil MULTIPLE allows selecting multiple documents.
+Non-nil AVAILABLE means to offer a list of all available documents;
+otherwise, offer only installed documents.
+
+Return a document metadata alist if MULTIPLE is nil; otherwise, a
+list of metadata alists."
+  (let ((cands (seq-map (lambda (it) (cons (alist-get 'slug it) it))
+                        (if available
+                            (devdocs--available-docs)
+                          (or (devdocs--installed-docs)
+                              (user-error "No documents in `%s'" devdocs-data-dir))))))
     (if multiple
         (delq nil (mapcar (lambda (s) (cdr (assoc s cands)))
                           (completing-read-multiple prompt cands)))
       (cdr (assoc (completing-read prompt cands nil t) cands)))))
 
-(defun devdocs--installed-p (doc)
-  "Non-nil if DOC is installed."
-  (file-exists-p
-   (expand-file-name "metadata" (expand-file-name doc devdocs-data-dir))))
-
 ;;;###autoload
 (defun devdocs-delete (doc)
   "Delete DevDocs documentation.
-DOC is a document slug."
-  (interactive (list (devdocs--read-document "Delete documentation: "
-                                            #'devdocs--installed-p)))
-  (let ((dest (file-name-as-directory
-               (expand-file-name doc devdocs-data-dir))))
+DOC is a document metadata alist."
+  (interactive (list (devdocs--read-document "Delete documentation: ")))
+  (let ((dest (expand-file-name (alist-get 'slug doc) devdocs-data-dir)))
     (if (and (file-directory-p dest)
              (file-in-directory-p dest devdocs-data-dir))
-        (delete-directory dest t t)
-      (user-error (format "Documentation for `%s' is not installed" doc)))))
+        (delete-directory dest t)
+      (user-error "Document `%s' is not installed" (alist-get 'slug doc)))))
 
 ;;;###autoload
 (defun devdocs-install (doc)
   "Download and install DevDocs documentation.
-DOC is a document slug."
-  (interactive (list (devdocs--read-document
-                      "Install documentation: "
-                      (lambda (s) (not (devdocs--installed-p s)))
-                      nil 'refresh)))
-  (let ((temp (make-temp-file "devdocs-" t)))
+DOC is a document metadata alist."
+  (interactive (list (devdocs--read-document "Install documentation: " nil t)))
+  (make-directory devdocs-data-dir t)
+  (let* ((slug (alist-get 'slug doc))
+         (mtime (alist-get 'mtime doc))
+         (temp (make-temp-file "devdocs-" t))
+         pages)
     (with-temp-buffer
-      (url-insert-file-contents (format "%s/%s/db.json" devdocs-cdn-url doc))
-      (seq-doseq (entry (json-read))
+      (url-insert-file-contents (format "%s/%s/db.json?%s" devdocs-cdn-url slug mtime))
+      (seq-doseq (entry (let ((json-key-type 'string))
+                          (json-read)))
         (with-temp-file (expand-file-name
                          (url-hexify-string (format "%s.html" (car entry))) temp)
+          (push (car entry) pages)
           (insert (cdr entry)))))
-    (url-copy-file (format "%s/%s/index.json" devdocs-cdn-url doc)
-                   (expand-file-name "index.json" temp))
+    (with-temp-buffer
+      (url-insert-file-contents (format "%s/%s/index.json?%s" devdocs-cdn-url slug mtime))
+      (let ((index (json-read)))
+        (with-temp-file (expand-file-name "index" temp)
+          (push `(pages . ,(apply #'vector (nreverse pages))) index)
+          (prin1 index (current-buffer)))))
     (with-temp-file (expand-file-name "metadata" temp)
-      (prin1 (devdocs--doc-metadata doc) (current-buffer)))
-    (rename-file temp (expand-file-name doc devdocs-data-dir) t)
-    (clrhash devdocs--cache)
-    (message "Installed %s documentation" (devdocs--doc-title doc))))
+      (prin1 (cons devdocs--data-format-version doc) (current-buffer)))
+    (let ((dest (expand-file-name slug devdocs-data-dir)))
+      (when (and (file-directory-p dest)
+                 (file-in-directory-p dest devdocs-data-dir))
+        (delete-directory dest t))
+      (rename-file (file-name-as-directory temp) dest))
+    (message "Document `%s' installed" slug)))
+
+;;;###autoload
+(defun devdocs-update-all ()
+  "Reinstall all documents with a new version available."
+  (interactive)
+  (when-let ((installed (when (file-directory-p devdocs-data-dir)
+                          (directory-files devdocs-data-dir nil "^[^.]")))
+             (newer (seq-filter
+                     (lambda (doc)
+                       (let-alist doc
+                         (and (member .slug installed)
+                              (< (alist-get 'mtime
+                                            (ignore-errors (devdocs--doc-metadata .slug))
+                                            0) ;; Update docs with an old data format too
+                                 .mtime))))
+                     (devdocs--available-docs)))
+             ((y-or-n-p (format "Update %s documents %s?"
+                                (length newer)
+                                (mapcar (lambda (d) (alist-get 'slug d)) newer)))))
+    (dolist (doc newer)
+      (devdocs-install doc))))
 
 ;;; Document indexes
 
 (defun devdocs--index (doc)
   "Return the index of document DOC.
-This is an alist containing `entries' and `types'."
-  (devdocs--with-cache
-   (let* ((docid (cons 'doc doc))
-          (idx (json-read-file (expand-file-name (concat doc "/index.json")
-                                                 devdocs-data-dir)))
-          (entries (alist-get 'entries idx)))
-     (prog1 idx
-       (seq-do-indexed (lambda (entry i)
-                         (push `(index . ,i) entry)
-                         (push docid entry)
-                         (aset entries i entry))
-                       entries)))))
+This is an alist containing `entries', `pages' and `types'."
+  (let* ((docid (cons 'doc doc))
+         (idx (with-temp-buffer
+                (insert-file-contents (expand-file-name
+                                       (concat (alist-get 'slug doc) "/index")
+                                       devdocs-data-dir))
+                (read (current-buffer))))
+         (entries (alist-get 'entries idx)))
+    (prog1 idx
+      (seq-do-indexed (lambda (entry i)
+                        (push docid entry)
+                        (push `(index . ,i) entry)
+                        (aset entries i entry))
+                      entries))))
 
 ;;; Documentation viewer
 
@@ -325,8 +368,9 @@ fragment part of ENTRY.path."
       (let ((buffer-read-only nil)
             (shr-external-rendering-functions (cons '(pre . devdocs--shr-tag-pre)
                                                     shr-external-rendering-functions))
-            (file (expand-file-name (format "%s/%s.html" .doc (url-hexify-string
-                                                               (devdocs--path-file .path)))
+            (file (expand-file-name (format "%s/%s.html"
+                                            .doc.slug
+                                            (url-hexify-string (devdocs--path-file .path)))
                                     devdocs-data-dir)))
         (erase-buffer)
         (setq-local shr-target-id (or .fragment (devdocs--path-fragment .path)))
@@ -336,7 +380,7 @@ fragment part of ENTRY.path."
            (insert-file-contents file)
            (libxml-parse-html-region (point-min) (point-max)))))
       (set-buffer-modified-p nil)
-      (setq-local devdocs-current-docs (list .doc))
+      (setq-local devdocs-current-docs (list .doc.slug))
       (push entry devdocs--stack)
       (devdocs-goto-target)
       (current-buffer))))
@@ -347,7 +391,8 @@ fragment part of ENTRY.path."
 
 (defun devdocs--browse-url (url &rest args)
   "A suitable `browse-url-browser-function' for `devdocs-mode'.
-URL can be an internal link in a DevDocs document."
+URL can be an internal link in a DevDocs document.
+ARGS is passed as is to `browse-url'."
   (if (string-match-p ":" url)
       (let ((browse-url-browser-function (default-value 'browse-url-browser-function)))
         (apply #'browse-url url args))
@@ -362,6 +407,7 @@ URL can be an internal link in a DevDocs document."
                                   it))
                               (alist-get 'entries (devdocs--index .doc)))))
         (unless entry (error "Can't find `%s'" dest))
+        (push `(doc . ,.doc) entry)
         (when frag (push `(fragment . ,frag) entry))
         (devdocs--render entry)))))
 
@@ -373,7 +419,7 @@ URL can be an internal link in a DevDocs document."
              (let ((s (let-alist it
                         ;; Disambiguation cookie for entries with same .name
                         (format #("%s\0%c%s" 2 7 (invisible t))
-                                .name .index .doc))))
+                                .name .index .doc.slug))))
                (prog1 s (put-text-property 0 1 'devdocs--data it s))))
            (alist-get 'entries (devdocs--index doc))))
 
@@ -397,12 +443,25 @@ URL can be an internal link in a DevDocs document."
       (add-text-properties pos (next-property-change pos nil max)
                            '(invisible t rear-nonsticky t)))))
 
-(defun devdocs--read-entry (prompt initial-input)
-  "Read the name of an entry in a document, using PROMPT.
-All entries of `devdocs-current-docs' are listed.
+(defun devdocs--relevant-docs (ask)
+  "Return a list of relevant documents for the current buffer.
+May ask interactively for the desired documents.  If ASK is
+non-nil, ask unconditionally."
+  (if ask
+      (let ((docs (devdocs--read-document "Documents for this buffer: " t)))
+        (prog1 docs
+          (setq-local devdocs-current-docs
+                      (mapcar (lambda (d) (alist-get 'slug d)) docs))))
+    (or (mapcar #'devdocs--doc-metadata devdocs-current-docs)
+        (devdocs--relevant-docs t)
+        (user-error "No documents"))))
+
+(defun devdocs--read-entry (prompt documents initial-input)
+  "Read the name of an entry in one of the DOCUMENTS, using PROMPT.
 
 INITIAL-INPUT is passed to `completing-read'"
-  (let* ((cands (mapcan #'devdocs--entries devdocs-current-docs))
+  (let* ((cands (devdocs--with-cache
+                 (mapcan #'devdocs--entries documents)))
          (metadata '(metadata
                      (category . devdocs)
                      (annotation-function . devdocs--annotate)))
@@ -424,16 +483,14 @@ INITIAL-INPUT is passed to `completing-read'"
 
 Display entries in the documents `devdocs-current-docs' for
 selection.  With a prefix argument (or, from Lisp, if ASK-DOCS is
-non-nil), first read a list of available documents and set
-`devdocs-current-docs' for this buffer.
+non-nil), first read the name of one or more installed documents
+and set `devdocs-current-docs' for this buffer.
 
 If INITIAL-INPUT is not nil, insert it into the minibuffer."
   (interactive "P")
-  (when (or ask-docs (not devdocs-current-docs))
-    (setq-local devdocs-current-docs (devdocs--read-document
-                                     "Docs for this buffer: "
-                                     #'devdocs--installed-p t)))
-  (let* ((entry (devdocs--read-entry "Go to documentation: " initial-input))
+  (let* ((entry (devdocs--read-entry "Go to documentation: "
+                                     (devdocs--relevant-docs ask-docs)
+                                     initial-input))
          (buffer (devdocs--render entry)))
     (with-selected-window (display-buffer buffer)
       (devdocs-goto-target)

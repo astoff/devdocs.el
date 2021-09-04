@@ -4,18 +4,16 @@ devdocs.el — Emacs viewer for DevDocs
 <a href="http://elpa.gnu.org/packages/devdocs.html"><img alt="GNU ELPA" src="https://elpa.gnu.org/packages/devdocs.svg"/></a>
 <a href="https://melpa.org/#/devdocs"><img alt="MELPA" src="https://melpa.org/packages/devdocs-badge.svg"/></a>
 
-devdocs.el is a documentation viewer similar to the built-in Info
+devdocs.el is a documentation viewer similar to Emacs's built-in Info
 browser, but geared towards documentation obtained from the [DevDocs]
 website.  The stable version is available from [GNU ELPA] and a
 development version is available from [MELPA]; to install, type `M-x
-package-install RET devdocs RET`.
+package-install RET devdocs`.
 
 To get started, download some documentation with `M-x devdocs-install`.
-This will first query https://devdocs.io for the available documents,
-and save to disk the selected document.
-
-Once you have the desired documents at hand, call `M-x devdocs-lookup`
-to search for entries.
+This will first query https://devdocs.io for the available documents
+and save the selected one to disk.  Once you have the desired
+documents at hand, call `M-x devdocs-lookup` to search for entries.
 
 In any given buffer, the first call to `devdocs-lookup` will query for
 a list of documents to search (you can select more than one option by
