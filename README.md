@@ -10,6 +10,8 @@ website.  The stable version is available from [GNU ELPA] and a
 development version is available from [MELPA]; to install, type `M-x
 package-install RET devdocs`.
 
+![image](https://user-images.githubusercontent.com/6500902/135726213-683b1f7d-5502-4afa-a549-c1aedaad8519.png)
+
 To get started, download some documentation with `M-x devdocs-install`.
 This will first query https://devdocs.io for the available documents
 and save the selected one to disk.  Once you have the desired
