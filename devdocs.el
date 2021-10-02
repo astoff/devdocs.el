@@ -333,6 +333,21 @@ with the order of appearance in the text."
   (interactive "p")
   (devdocs-next-page (- count)))
 
+(defun devdocs-copy-url ()
+  "Copy the URL of the current DevDocs page to the kill ring."
+  (interactive)
+  (let-alist (or (car devdocs--stack)
+                 (user-error "Not in a DevDocs buffer"))
+    (let ((url (url-encode-url
+                (format "%s/%s/%s"
+                        devdocs-site-url
+                        .doc.slug
+                        (if .fragment
+                            (concat (devdocs--path-file .path) "#" .fragment)
+                          .path)))))
+      (kill-new url)
+      (message "Copied %s" url))))
+
 (let ((map devdocs-mode-map))
   (define-key map [tab] 'forward-button)
   (define-key map [backtab] 'backward-button)
@@ -343,6 +358,7 @@ with the order of appearance in the text."
   (define-key map "]" 'devdocs-next-page)
   (define-key map "l" 'devdocs-go-back)
   (define-key map "r" 'devdocs-go-forward)
+  (define-key map "w" 'devdocs-copy-url)
   (define-key map "." 'devdocs-goto-target))
 
 ;;; Rendering
