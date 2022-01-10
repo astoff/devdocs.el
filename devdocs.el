@@ -214,6 +214,13 @@ DOC is a document metadata alist."
     (message "Document `%s' installed" slug)))
 
 ;;;###autoload
+(defun devdocs-ensure-installed (doc)
+  "Install DOC if not already installed."
+  (interactive (list (alist-get 'slug (devdocs--read-document "Install documentation: " nil t))))
+  (unless (seq-find (lambda (it) (string= (alist-get 'slug it) doc)) (devdocs--installed-docs))
+    (devdocs-install (seq-find (lambda (it) (string= (alist-get 'slug it) doc)) (devdocs--available-docs)))))
+
+;;;###autoload
 (defun devdocs-update-all ()
   "Reinstall all documents with a new version available."
   (interactive)
@@ -550,6 +557,9 @@ If INITIAL-INPUT is not nil, insert it into the minibuffer."
                       (format "Search %s: " devdocs-site-url)
                       nil nil nil nil (thing-at-point 'symbol))))
   (browse-url (format "%s/#q=%s" devdocs-site-url (url-hexify-string query))))
+
+;;; Load use-package keyword if use-package is enabled
+(with-eval-after-load 'use-package (require 'use-package-devdocs))
 
 (provide 'devdocs)
 ;;; devdocs.el ends here
