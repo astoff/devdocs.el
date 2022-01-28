@@ -280,7 +280,8 @@ This is an alist containing `entries', `pages' and `types'."
   "Go to the original position in a DevDocs buffer."
   (interactive)
   (goto-char (point-min))
-  (when-let ((match (text-property-search-forward 'shr-target-id shr-target-id t)))
+  (when-let ((pred (if (fboundp 'shr--set-target-ids) #'member t)) ;; shr change in Emacs 29
+             (match (text-property-search-forward 'shr-target-id shr-target-id pred)))
     (goto-char (prop-match-beginning match))))
 
 (defun devdocs-go-back ()
