@@ -449,19 +449,22 @@ ARGS is passed as is to `browse-url'."
 
 ;;; Lookup command
 
-(defun devdocs--entries (doc)
-  "A list of entries in DOC, as propertized strings."
-  (seq-map (lambda (it)
-             (let ((s (let-alist it
-                        ;; Disambiguation cookie for entries with same .name
-                        (format #("%s\0%c%s" 2 7 (invisible t))
-                                .name .index .doc.slug))))
-               (prog1 s (put-text-property 0 1 'devdocs--data it s))))
-           (alist-get 'entries (devdocs--index doc))))
+(defun devdocs--entries (documents)
+  "A list of entries in DOCUMENTS, as propertized strings."
+  (let* ((cookie #x10FFFF) ;; Disambiguate entries with identical names
+         (fmtcand (lambda (it)
+                    (setq cookie (1+ cookie))
+                    (concat (alist-get 'name it)
+                            (propertize (string cookie)
+                                        'invisible t
+                                        'devdocs--data it)))))
+    (mapcan (lambda (doc)
+              (mapcar fmtcand (alist-get 'entries (devdocs--index doc))))
+             documents)))
 
 (defun devdocs--get-data (str)
   "Get data stored as a string property in STR."
-  (get-text-property 0 'devdocs--data str))
+  (get-text-property (1- (length str)) 'devdocs--data str))
 
 (defun devdocs--annotate (cand)
   "Return an annotation for `devdocs--read-entry' candidate CAND."
@@ -471,12 +474,12 @@ ARGS is passed as is to `browse-url'."
 
 (defun devdocs--eat-cookie (&rest _)
   "Eat the disambiguation cookie in the minibuffer."
-  (let* ((pos (minibuffer-prompt-end))
-         (max (point-max)))
-    (while (and (< pos max) (/= 0 (char-after pos)))
-      (setq pos (1+ pos)))
-    (when (< pos max)
-      (add-text-properties pos (next-property-change pos nil max)
+  (save-excursion
+    (goto-char (minibuffer-prompt-end))
+    (while (and (not (eobp)) (<= (char-after) #x10FFFF))
+      (forward-char))
+    (unless (eobp)
+      (add-text-properties (point) (1+ (point))
                            '(invisible t rear-nonsticky t)))))
 
 (defun devdocs--relevant-docs (ask)
@@ -497,7 +500,7 @@ non-nil, ask unconditionally."
 
 INITIAL-INPUT is passed to `completing-read'"
   (let* ((cands (devdocs--with-cache
-                 (mapcan #'devdocs--entries documents)))
+                 (devdocs--entries documents)))
          (metadata '(metadata
                      (category . devdocs)
                      (annotation-function . devdocs--annotate)))
