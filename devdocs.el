@@ -75,6 +75,16 @@ directory-local variable."
   "String used to format a documentation location, e.g. in header line."
   :type 'string)
 
+(defcustom devdocs-disambiguated-entry-format #("%s (%s)" 3 7 (face italic))
+  "How to disambiguate entries with identical names in `devdocs-lookup'.
+This string is passed to `format' with two arguments, the entry
+name and a count."
+  :type '(choice (const :tag "Count in parentheses, italicized"
+                        #("%s (%s)" 3 7 (face italic)))
+                 (const :tag "Invisible cookie"
+                        #("%s (%s)" 2 7 (invisible t)))
+                 string))
+
 (defcustom devdocs-fontify-code-blocks t
   "Whether to fontify code snippets inside pre tags.
 Fontification is done using the `org-src' library, which see."
@@ -451,36 +461,32 @@ ARGS is passed as is to `browse-url'."
 
 (defun devdocs--entries (documents)
   "A list of entries in DOCUMENTS, as propertized strings."
-  (let* ((cookie #x10FFFF) ;; Disambiguate entries with identical names
-         (fmtcand (lambda (it)
-                    (setq cookie (1+ cookie))
-                    (concat (alist-get 'name it)
-                            (propertize (string cookie)
-                                        'invisible t
-                                        'devdocs--data it)))))
-    (mapcan (lambda (doc)
-              (mapcar fmtcand (alist-get 'entries (devdocs--index doc))))
-             documents)))
+  (let* ((counts (make-hash-table :test 'equal))
+         (mkentry (lambda (it)
+                    (let* ((name (alist-get 'name it))
+                           (count (1+ (gethash name counts 0))))
+                      (puthash name count counts)
+                      `(,name ,count . ,it))))
+         (entries (mapcan (lambda (doc)
+                            (mapcar mkentry
+                                    (alist-get 'entries (devdocs--index doc))))
+                          documents)))
+    (mapcar (pcase-lambda (`(,name ,count . ,it))
+              (propertize (if (= 1 (gethash name counts))
+                              name
+                            (format devdocs-disambiguated-entry-format name count))
+                          'devdocs--data it))
+            entries)))
 
 (defun devdocs--get-data (str)
   "Get data stored as a string property in STR."
-  (get-text-property (1- (length str)) 'devdocs--data str))
+  (get-text-property 0 'devdocs--data str))
 
 (defun devdocs--annotate (cand)
   "Return an annotation for `devdocs--read-entry' candidate CAND."
   (let-alist (devdocs--get-data cand)
     (concat " " (propertize " " 'display '(space :align-to 40))
      (devdocs--doc-title .doc) devdocs-separator .type)))
-
-(defun devdocs--eat-cookie (&rest _)
-  "Eat the disambiguation cookie in the minibuffer."
-  (save-excursion
-    (goto-char (minibuffer-prompt-end))
-    (while (and (not (eobp)) (<= (char-after) #x10FFFF))
-      (forward-char))
-    (unless (eobp)
-      (add-text-properties (point) (1+ (point))
-                           '(invisible t rear-nonsticky t)))))
 
 (defun devdocs--relevant-docs (ask)
   "Return a list of relevant documents for the current buffer.
@@ -508,12 +514,9 @@ INITIAL-INPUT is passed to `completing-read'"
                  (if (eq action 'metadata)
                      metadata
                    (complete-with-action action cands string predicate))))
-         (cand (minibuffer-with-setup-hook
-                   (lambda ()
-                     (add-hook 'after-change-functions 'devdocs--eat-cookie nil t))
-                   (completing-read prompt coll nil t initial-input
-                                    'devdocs-history
-                                    (thing-at-point 'symbol)))))
+         (cand (completing-read prompt coll nil t initial-input
+                                'devdocs-history
+                                (thing-at-point 'symbol))))
     (devdocs--get-data (car (member cand cands)))))
 
 ;;;###autoload
