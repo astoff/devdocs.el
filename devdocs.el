@@ -117,7 +117,7 @@ its return value; take the necessary precautions."
          (timer-set-time (car data) (time-add nil devdocs-cache-timeout)))
      (let ((val (funcall fun))
            (timer (run-at-time devdocs-cache-timeout nil
-                               (lambda () (remhash funrep devdocs--cache)))))
+                               #'remhash funrep devdocs--cache)))
        (prog1 val
          (puthash funrep (cons timer val) devdocs--cache)))))
 
@@ -169,11 +169,11 @@ otherwise, offer only installed documents.
 
 Return a document metadata alist if MULTIPLE is nil; otherwise, a
 list of metadata alists."
-  (let ((cands (seq-map (lambda (it) (cons (alist-get 'slug it) it))
-                        (if available
-                            (devdocs--available-docs)
-                          (or (devdocs--installed-docs)
-                              (user-error "No documents in `%s'" devdocs-data-dir))))))
+  (let ((cands (mapcar (lambda (it) (cons (alist-get 'slug it) it))
+                       (if available
+                           (devdocs--available-docs)
+                         (or (devdocs--installed-docs)
+                             (user-error "No documents in `%s'" devdocs-data-dir))))))
     (if multiple
         (delq nil (mapcar (lambda (s) (cdr (assoc s cands)))
                           (completing-read-multiple prompt cands)))
@@ -202,8 +202,8 @@ DOC is a document metadata alist."
          pages)
     (with-temp-buffer
       (url-insert-file-contents (format "%s/%s/db.json?%s" devdocs-cdn-url slug mtime))
-      (seq-doseq (entry (let ((json-key-type 'string))
-                          (json-read)))
+      (dolist (entry (let ((json-key-type 'string))
+                       (json-read)))
         (with-temp-file (expand-file-name
                          (url-hexify-string (format "%s.html" (car entry))) temp)
           (push (car entry) pages)
@@ -211,8 +211,8 @@ DOC is a document metadata alist."
     (with-temp-buffer
       (url-insert-file-contents (format "%s/%s/index.json?%s" devdocs-cdn-url slug mtime))
       (let ((index (json-read)))
+        (push `(pages . ,(vconcat (nreverse pages))) index)
         (with-temp-file (expand-file-name "index" temp)
-          (push `(pages . ,(apply #'vector (nreverse pages))) index)
           (prin1 index (current-buffer)))))
     (with-temp-file (expand-file-name "metadata" temp)
       (prin1 (cons devdocs--data-format-version doc) (current-buffer)))
@@ -316,10 +316,12 @@ Note that this refers to the index order, which may not coincide
 with the order of appearance in the text."
   (interactive "p")
   (let-alist (car devdocs--stack)
+    (unless .index
+      (user-error "No current entry"))
     (devdocs--render
      (or (ignore-error 'args-out-of-range
-           (seq-elt (alist-get 'entries (devdocs--index .doc))
-                    (+ count .index)))
+           (elt (alist-get 'entries (devdocs--index .doc))
+                (+ count .index)))
          (user-error (if (< count 0) "No previous entry" "No next entry"))))))
 
 (defun devdocs-previous-entry (count)
@@ -333,7 +335,7 @@ with the order of appearance in the text."
   (let-alist (car devdocs--stack)
     (let* ((pages (alist-get 'pages (devdocs--index .doc)))
            (page (+ count (seq-position pages (devdocs--path-file .path))))
-           (path (or (ignore-error 'args-out-of-range (seq-elt pages page))
+           (path (or (ignore-error 'args-out-of-range (elt pages page))
                      (user-error (if (< count 0) "No previous page" "No next page")))))
       (devdocs--render `((doc . ,.doc)
                          (path . ,path)
@@ -457,7 +459,7 @@ ARGS is passed as is to `browse-url'."
         (when frag (push `(fragment . ,frag) entry))
         (devdocs--render entry)))))
 
-;;; Lookup command
+;;; Lookup commands
 
 (defun devdocs--entries (documents)
   "A list of entries in DOCUMENTS, as propertized strings."
