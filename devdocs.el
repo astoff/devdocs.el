@@ -90,6 +90,16 @@ name and a count."
 Fontification is done using the `org-src' library, which see."
   :type 'boolean)
 
+(defcustom devdocs-isearch-wrap #'devdocs-isearch-wrap
+  "How to wrap isearch when reaching the beginning or end of a page.
+This is used as `isearch-wrap-function' in DevDocs buffers.  If
+nil, keep the default wrapping behavior."
+  :type '(choice (const :tag "Jump to next or previous page" #'devdocs-isearch-wrap)
+                 (const :tag "Wrap as usual, staying in the same page" nil)
+                 function))
+
+(defvar devdocs-buffer-name "*devdocs*")
+
 (defvar devdocs-history nil
   "History of documentation entries.")
 
@@ -284,7 +294,9 @@ This is an alist containing `entries', `pages' and `types'."
    buffer-undo-list t
    header-line-format devdocs-header-line
    revert-buffer-function 'devdocs--revert-buffer
-   truncate-lines t))
+   truncate-lines t)
+  (when devdocs-isearch-wrap
+    (setq-local isearch-wrap-function devdocs-isearch-wrap)))
 
 (defun devdocs-goto-target ()
   "Go to the original position in a DevDocs buffer."
@@ -333,7 +345,8 @@ with the order of appearance in the text."
   "Go forward COUNT pages in this document."
   (interactive "p")
   (let-alist (car devdocs--stack)
-    (let* ((pages (alist-get 'pages (devdocs--index .doc)))
+    (let* ((pages (devdocs--with-cache
+                   (alist-get 'pages (devdocs--index .doc))))
            (page (+ count (seq-position pages (devdocs--path-file .path))))
            (path (or (ignore-error 'args-out-of-range (elt pages page))
                      (user-error (if (< count 0) "No previous page" "No next page")))))
@@ -360,6 +373,29 @@ with the order of appearance in the text."
                           .path)))))
       (kill-new url)
       (message "Copied %s" url))))
+
+(defun devdocs-isearch-wrap ()
+  "Continue isearch in the next or previous document page."
+  (let ((reporter (make-progress-reporter "Searching"))
+        (entry (car devdocs--stack))
+        (direction (if isearch-forward +1 -1)))
+    (with-temp-buffer
+      (let ((devdocs-buffer-name (buffer-name (current-buffer)))
+            (case-fold-search isearch-case-fold-search)
+            (isearch-forward t))
+        (setq-local devdocs--stack (list entry))
+        (while (progn
+                 (progress-reporter-update reporter)
+                 (when (bound-and-true-p isearch-mb-mode)
+                   (let ((inhibit-redisplay nil)) (redisplay))
+                   (when quit-flag (signal 'quit nil)))
+                 (devdocs-next-page direction)
+                 (not (isearch-search-string isearch-string nil t))))
+        (setq entry (car devdocs--stack))))
+    (progress-reporter-done reporter)
+    (devdocs--render entry)
+    (setq isearch-wrapped nil)
+    (goto-char (if isearch-forward (point-min) (point-max)))))
 
 (let ((map devdocs-mode-map))
   (define-key map [tab] 'forward-button)
@@ -409,7 +445,7 @@ with the order of appearance in the text."
 ENTRY is an alist like those in the variable `devdocs--index',
 possibly with an additional ENTRY.fragment which overrides the
 fragment part of ENTRY.path."
-  (with-current-buffer (get-buffer-create "*devdocs*")
+  (with-current-buffer (get-buffer-create devdocs-buffer-name)
     (unless (eq major-mode 'devdocs-mode)
       (devdocs-mode))
     (let-alist entry
