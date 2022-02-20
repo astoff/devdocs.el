@@ -20,12 +20,15 @@ package-install RET devdocs=.
 To get started, download some documentation with =M-x
 devdocs-install=.  This will query https://devdocs.io for the
 available documents and save the selected one to disk.  To read the
-installed documentation, there are two options:
+installed documentation, there are a few different options:
 
-- =devdocs-peruse=: Select a document and display its first page.
 - =devdocs-lookup=: Select an index entry and display it.
+- =devdocs-peruse=: Select a document and display its first page.
+- =devdocs-grep=: Do full-text search on a collection of documents,
+  placing the results in a grep buffer.  This feature is experimental,
+  and somewhat slow; you are usually better served by an index lookup.
 
-It's handy to have a keybinding for the latter command.  One
+It's handy to have a keybinding for the lookup command.  One
 possibility, in analogy to =C-h S= (=info-lookup-symbol=), is
 
 #+begin_src elisp
@@ -39,7 +42,7 @@ in subsequent calls to =devdocs-lookup=, unless a prefix argument is
 given; in this case you can select a new list of documents.
 
 In the =*devdocs*= buffer, navigation keys similar to Info and
-=*Help*= buffers are available; press =C-h m= for details.  Internal
+=*Help*= buffers are available; press =?= for details.  Internal
 hyperlinks are opened in the same viewing buffer, and external links
 are opened as =browse-url= normally would.
 
