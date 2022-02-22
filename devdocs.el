@@ -275,7 +275,7 @@ This is an alist containing `entries', `pages' and `types'."
   '(:eval (let-alist (car devdocs--stack)
             (concat (devdocs--doc-title .doc)
                     (and .type devdocs-separator) .type
-                    (and .name devdocs-separator) .name))))
+                    devdocs-separator (or .name .path)))))
 
 (define-derived-mode devdocs-mode special-mode "DevDocs"
   "Major mode for viewing DevDocs documents."
@@ -334,12 +334,13 @@ with the order of appearance in the text."
   (interactive "p")
   (let-alist (car devdocs--stack)
     (let* ((pages (alist-get 'pages (devdocs--index .doc)))
-           (page (+ count (seq-position pages (devdocs--path-file .path))))
-           (path (or (ignore-error 'args-out-of-range (elt pages page))
-                     (user-error (if (< count 0) "No previous page" "No next page")))))
-      (devdocs--render `((doc . ,.doc)
-                         (path . ,path)
-                         (name . ,(format "%s/%s" (1+ page) (length pages))))))))
+           (target (+ count (seq-position pages (devdocs--path-file .path))))
+           (path (or (ignore-error 'args-out-of-range (elt pages target))
+                     (user-error "No %s page" (if (< count 0) "previous" "next"))))
+           (entry (or (seq-find (lambda (entry) (string= (alist-get 'path entry) path))
+                                (alist-get 'entries (devdocs--index .doc)))
+                      `((doc . ,.doc) (path . ,path)))))
+      (devdocs--render entry))))
 
 (defun devdocs-previous-page (count)
   "Go backward COUNT entries in this document."
@@ -543,9 +544,7 @@ If INITIAL-INPUT is not nil, insert it into the minibuffer."
   (interactive (list (devdocs--read-document "Peruse documentation: ")))
   (let ((pages (alist-get 'pages (devdocs--index doc))))
     (pop-to-buffer
-     (devdocs--render `((path . ,(seq-first pages))
-                        (doc . ,doc)
-                        (name . ,(format "%s/%s" 1 (length pages))))))))
+     (devdocs--render `((doc . ,doc) (path . ,(seq-first pages)))))))
 
 ;;; Compatibility with the old devdocs package
 
