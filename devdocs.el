@@ -316,13 +316,13 @@ Note that this refers to the index order, which may not coincide
 with the order of appearance in the text."
   (interactive "p")
   (let-alist (car devdocs--stack)
-    (unless .index
-      (user-error "No current entry"))
-    (devdocs--render
-     (or (ignore-error 'args-out-of-range
-           (elt (alist-get 'entries (devdocs--index .doc))
-                (+ count .index)))
-         (user-error (if (< count 0) "No previous entry" "No next entry"))))))
+    (let* ((entries (alist-get 'entries (devdocs--index .doc)))
+           (pred (lambda (entry _) (string= (alist-get 'path entry) .path)))
+           (current (seq-position entries nil pred)))
+      (unless current (user-error "No current entry"))
+      (devdocs--render
+       (or (ignore-error 'args-out-of-range (elt entries (+ count current)))
+           (user-error "No %s entry" (if (< count 0) "previous" "next")))))))
 
 (defun devdocs-previous-entry (count)
   "Go backward COUNT entries in this document."
@@ -390,10 +390,9 @@ with the order of appearance in the text."
   (pcase (string-to-char path)
     ('?/ path)
     ('?# (concat (devdocs--path-file base) path))
-    (_ (substring ;; ugly!
+    (_ (seq-rest ;; drop leading slash
         (url-expander-remove-relative-links ;; undocumented function!
-         (concat (file-name-directory base) path))
-        1))))
+         (concat (file-name-directory base) path))))))
 
 (defun devdocs--shr-tag-pre (dom)
   "Insert and fontify pre-tag represented by DOM."
@@ -406,7 +405,7 @@ with the order of appearance in the text."
 (defun devdocs--render (entry)
   "Render a DevDocs documentation entry, returning a buffer.
 
-ENTRY is an alist like those in the variable `devdocs--index',
+ENTRY is an alist like those in the entry index of the document,
 possibly with an additional ENTRY.fragment which overrides the
 fragment part of ENTRY.path."
   (with-current-buffer (get-buffer-create "*devdocs*")
@@ -448,14 +447,12 @@ ARGS is passed as is to `browse-url'."
       (let* ((dest (devdocs--path-expand url .path))
              (file (devdocs--path-file dest))
              (frag (devdocs--path-fragment dest))
-             (entry (seq-some (lambda (it)
-                                (when (let-alist it
-                                        (or (string= .path dest)
-                                            (string= .path file)))
-                                  it))
+             (entry (seq-find (lambda (it)
+                                (let-alist it
+                                  (or (string= .path dest)
+                                      (string= .path file))))
                               (alist-get 'entries (devdocs--index .doc)))))
         (unless entry (error "Can't find `%s'" dest))
-        (push `(doc . ,.doc) entry)
         (when frag (push `(fragment . ,frag) entry))
         (devdocs--render entry)))))
 
@@ -492,8 +489,8 @@ ARGS is passed as is to `browse-url'."
 
 (defun devdocs--relevant-docs (ask)
   "Return a list of relevant documents for the current buffer.
-May ask interactively for the desired documents.  If ASK is
-non-nil, ask unconditionally."
+May ask interactively for the desired documents, remembering the
+choice for this buffer.  If ASK is non-nil, ask unconditionally."
   (if ask
       (let ((docs (devdocs--read-document "Documents for this buffer: " t)))
         (prog1 docs
