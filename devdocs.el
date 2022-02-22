@@ -246,22 +246,20 @@ DOC is a document metadata alist."
 
 ;;; Document indexes
 
-(defun devdocs--index (doc)
-  "Return the index of document DOC.
-This is an alist containing `entries', `pages' and `types'."
-  (let* ((docid (cons 'doc doc))
-         (idx (with-temp-buffer
-                (insert-file-contents (expand-file-name
-                                       (concat (alist-get 'slug doc) "/index")
-                                       devdocs-data-dir))
-                (read (current-buffer))))
-         (entries (alist-get 'entries idx)))
-    (prog1 idx
-      (seq-do-indexed (lambda (entry i)
-                        (push docid entry)
-                        (push `(index . ,i) entry)
-                        (aset entries i entry))
-                      entries))))
+(defun devdocs--index (doc kind)
+  "Return an index of document DOC, where KIND is `entries', `pages' or `types'."
+  (if kind
+      (alist-get kind (devdocs--with-cache (devdocs--index doc nil)))
+    (let* ((docmeta (cons 'doc doc))
+           (indexes (with-temp-buffer
+                      (insert-file-contents (expand-file-name
+                                             (concat (alist-get 'slug doc) "/index")
+                                             devdocs-data-dir))
+                      (read (current-buffer))))
+           (entries (alist-get 'entries indexes)))
+      (prog1 indexes
+        (seq-do-indexed (lambda (entry i) (aset entries i (cons docmeta entry)))
+                        entries)))))
 
 ;;; Documentation viewer
 
@@ -316,7 +314,7 @@ Note that this refers to the index order, which may not coincide
 with the order of appearance in the text."
   (interactive "p")
   (let-alist (car devdocs--stack)
-    (let* ((entries (alist-get 'entries (devdocs--index .doc)))
+    (let* ((entries (devdocs--index .doc 'entries))
            (pred (lambda (entry _) (string= (alist-get 'path entry) .path)))
            (current (seq-position entries nil pred)))
       (unless current (user-error "No current entry"))
@@ -333,12 +331,12 @@ with the order of appearance in the text."
   "Go forward COUNT pages in this document."
   (interactive "p")
   (let-alist (car devdocs--stack)
-    (let* ((pages (alist-get 'pages (devdocs--index .doc)))
+    (let* ((pages (devdocs--index .doc 'pages))
            (target (+ count (seq-position pages (devdocs--path-file .path))))
            (path (or (ignore-error 'args-out-of-range (elt pages target))
                      (user-error "No %s page" (if (< count 0) "previous" "next"))))
            (entry (or (seq-find (lambda (entry) (string= (alist-get 'path entry) path))
-                                (alist-get 'entries (devdocs--index .doc)))
+                                (devdocs--index .doc 'entries))
                       `((doc . ,.doc) (path . ,path)))))
       (devdocs--render entry))))
 
@@ -452,7 +450,7 @@ ARGS is passed as is to `browse-url'."
                                 (let-alist it
                                   (or (string= .path dest)
                                       (string= .path file))))
-                              (alist-get 'entries (devdocs--index .doc)))))
+                              (devdocs--index .doc 'entries))))
         (unless entry (error "Can't find `%s'" dest))
         (when frag (push `(fragment . ,frag) entry))
         (devdocs--render entry)))))
@@ -469,7 +467,7 @@ ARGS is passed as is to `browse-url'."
                       `(,name ,count . ,it))))
          (entries (mapcan (lambda (doc)
                             (mapcar mkentry
-                                    (alist-get 'entries (devdocs--index doc))))
+                                    (devdocs--index doc 'entries)))
                           documents)))
     (mapcar (pcase-lambda (`(,name ,count . ,it))
               (propertize (if (= 1 (gethash name counts))
@@ -542,7 +540,7 @@ If INITIAL-INPUT is not nil, insert it into the minibuffer."
 (defun devdocs-peruse (doc)
   "Read a document from the first page."
   (interactive (list (devdocs--read-document "Peruse documentation: ")))
-  (let ((pages (alist-get 'pages (devdocs--index doc))))
+  (let ((pages (devdocs--index doc 'pages)))
     (pop-to-buffer
      (devdocs--render `((doc . ,doc) (path . ,(seq-first pages)))))))
 
