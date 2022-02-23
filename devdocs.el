@@ -327,18 +327,39 @@ with the order of appearance in the text."
   (interactive "p")
   (devdocs-next-entry (- count)))
 
+(defun devdocs-goto-page (doc page)
+  "Go to a given PAGE (a number or path) of DOC.
+Interactively, read a page name with completion."
+  (interactive (let-alist (car devdocs--stack)
+                 (list .doc (completing-read "Go to page: "
+                                             (append (devdocs--index .doc 'pages) nil)
+                                             nil t nil 'devdocs-history))))
+  (let* ((path (cond ((stringp page) page)
+                     ((numberp page) (elt (devdocs--index doc 'pages) page))))
+         (entry (or (seq-find (lambda (entry) (string= (alist-get 'path entry) path))
+                              (devdocs--index doc 'entries))
+                    `((doc . ,doc) (path . ,path)))))
+    (devdocs--render entry)))
+
+(defun devdocs-first-page (doc)
+  "Go to first page of DOC."
+  (interactive (list (alist-get 'doc (car devdocs--stack))))
+  (devdocs-goto-page doc 0))
+
+(defun devdocs-last-page (doc)
+  "Go to last page of DOC."
+  (interactive (list (alist-get 'doc (car devdocs--stack))))
+  (devdocs-goto-page doc (1- (length (devdocs--index doc 'pages)))))
+
 (defun devdocs-next-page (count)
   "Go forward COUNT pages in this document."
   (interactive "p")
   (let-alist (car devdocs--stack)
     (let* ((pages (devdocs--index .doc 'pages))
-           (target (+ count (seq-position pages (devdocs--path-file .path))))
-           (path (or (ignore-error 'args-out-of-range (elt pages target))
-                     (user-error "No %s page" (if (< count 0) "previous" "next"))))
-           (entry (or (seq-find (lambda (entry) (string= (alist-get 'path entry) path))
-                                (devdocs--index .doc 'entries))
-                      `((doc . ,.doc) (path . ,path)))))
-      (devdocs--render entry))))
+           (dest (+ count (seq-position pages (devdocs--path-file .path)))))
+      (cond ((< dest 0) (user-error "No previous page"))
+            ((<= (length pages) dest) (user-error "No next page")))
+      (devdocs-goto-page .doc dest))))
 
 (defun devdocs-previous-page (count)
   "Go backward COUNT entries in this document."
@@ -361,17 +382,21 @@ with the order of appearance in the text."
       (message "Copied %s" url))))
 
 (let ((map devdocs-mode-map))
-  (define-key map [tab] 'forward-button)
-  (define-key map [backtab] 'backward-button)
-  (define-key map "i" 'devdocs-lookup)
-  (define-key map "p" 'devdocs-previous-entry)
-  (define-key map "n" 'devdocs-next-entry)
-  (define-key map "[" 'devdocs-previous-page)
-  (define-key map "]" 'devdocs-next-page)
-  (define-key map "l" 'devdocs-go-back)
-  (define-key map "r" 'devdocs-go-forward)
-  (define-key map "w" 'devdocs-copy-url)
-  (define-key map "." 'devdocs-goto-target))
+  (define-key map [tab] #'forward-button)
+  (define-key map [backtab] #'backward-button)
+  (define-key map "d" #'devdocs-peruse)
+  (define-key map "i" #'devdocs-lookup)
+  (define-key map "p" #'devdocs-previous-entry)
+  (define-key map "n" #'devdocs-next-entry)
+  (define-key map "g" #'devdocs-goto-page)
+  (define-key map "[" #'devdocs-previous-page)
+  (define-key map "]" #'devdocs-next-page)
+  (define-key map "<" #'devdocs-first-page)
+  (define-key map ">" #'devdocs-last-page)
+  (define-key map "l" #'devdocs-go-back)
+  (define-key map "r" #'devdocs-go-forward)
+  (define-key map "w" #'devdocs-copy-url)
+  (define-key map "." #'devdocs-goto-target))
 
 ;;; Rendering
 
@@ -540,9 +565,7 @@ If INITIAL-INPUT is not nil, insert it into the minibuffer."
 (defun devdocs-peruse (doc)
   "Read a document from the first page."
   (interactive (list (devdocs--read-document "Peruse documentation: ")))
-  (let ((pages (devdocs--index doc 'pages)))
-    (pop-to-buffer
-     (devdocs--render `((doc . ,doc) (path . ,(seq-first pages)))))))
+  (pop-to-buffer (devdocs-goto-page doc 0)))
 
 ;;; Compatibility with the old devdocs package
 
