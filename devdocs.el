@@ -286,6 +286,7 @@ DOC is a document metadata alist."
 
 (defun devdocs-goto-target ()
   "Go to the original position in a DevDocs buffer."
+  (declare (modes devdocs-mode))
   (interactive)
   (goto-char (point-min))
   (when-let ((pred (if (fboundp 'shr--set-target-ids) #'member t)) ;; shr change in Emacs 29
@@ -294,6 +295,7 @@ DOC is a document metadata alist."
 
 (defun devdocs-go-back ()
   "Go to the previously displayed entry in this DevDocs buffer."
+  (declare (modes devdocs-mode))
   (interactive)
   (unless (cadr devdocs--stack)
     (user-error "No previous entry"))
@@ -302,6 +304,7 @@ DOC is a document metadata alist."
 
 (defun devdocs-go-forward ()
   "Go to the next entry in this DevDocs buffer."
+  (declare (modes devdocs-mode))
   (interactive)
   (unless (car devdocs--forward-stack)
     (user-error "No next entry"))
@@ -312,6 +315,7 @@ DOC is a document metadata alist."
 
 Note that this refers to the index order, which may not coincide
 with the order of appearance in the text."
+  (declare (modes devdocs-mode))
   (interactive "p")
   (let-alist (car devdocs--stack)
     (let* ((entries (devdocs--index .doc 'entries))
@@ -324,12 +328,14 @@ with the order of appearance in the text."
 
 (defun devdocs-previous-entry (count)
   "Go backward COUNT entries in this document."
+  (declare (modes devdocs-mode))
   (interactive "p")
   (devdocs-next-entry (- count)))
 
 (defun devdocs-goto-page (doc page)
   "Go to a given PAGE (a number or path) of DOC.
 Interactively, read a page name with completion."
+  (declare (modes devdocs-mode))
   (interactive (let-alist (car devdocs--stack)
                  (list .doc (completing-read "Go to page: "
                                              (append (devdocs--index .doc 'pages) nil)
@@ -343,16 +349,19 @@ Interactively, read a page name with completion."
 
 (defun devdocs-first-page (doc)
   "Go to first page of DOC."
+  (declare (modes devdocs-mode))
   (interactive (list (alist-get 'doc (car devdocs--stack))))
   (devdocs-goto-page doc 0))
 
 (defun devdocs-last-page (doc)
   "Go to last page of DOC."
+  (declare (modes devdocs-mode))
   (interactive (list (alist-get 'doc (car devdocs--stack))))
   (devdocs-goto-page doc (1- (length (devdocs--index doc 'pages)))))
 
 (defun devdocs-next-page (count)
   "Go forward COUNT pages in this document."
+  (declare (modes devdocs-mode))
   (interactive "p")
   (let-alist (car devdocs--stack)
     (let* ((pages (devdocs--index .doc 'pages))
@@ -363,11 +372,13 @@ Interactively, read a page name with completion."
 
 (defun devdocs-previous-page (count)
   "Go backward COUNT entries in this document."
+  (declare (modes devdocs-mode))
   (interactive "p")
   (devdocs-next-page (- count)))
 
 (defun devdocs-copy-url ()
   "Copy the URL of the current DevDocs page to the kill ring."
+  (declare (modes devdocs-mode))
   (interactive)
   (let-alist (or (car devdocs--stack)
                  (user-error "Not in a DevDocs buffer"))
