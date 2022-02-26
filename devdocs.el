@@ -39,6 +39,7 @@
 (require 'shr)
 (require 'url-expand)
 (eval-when-compile
+  (require 'grep)
   (require 'let-alist))
 
 (unless (libxml-available-p)
@@ -89,6 +90,9 @@ name and a count."
   "Whether to fontify code snippets inside pre tags.
 Fontification is done using the `org-src' library, which see."
   :type 'boolean)
+
+(defvar devdocs--buffer-name "*devdocs*"
+  "Name of the buffer to display DevDocs documents.")
 
 (defvar devdocs-history nil
   "History of documentation entries.")
@@ -386,6 +390,7 @@ Interactively, read a page name with completion."
   (define-key map [backtab] #'backward-button)
   (define-key map "d" #'devdocs-peruse)
   (define-key map "i" #'devdocs-lookup)
+  (define-key map "s" #'devdocs-grep)
   (define-key map "p" #'devdocs-previous-entry)
   (define-key map "n" #'devdocs-next-entry)
   (define-key map "g" #'devdocs-goto-page)
@@ -432,7 +437,7 @@ Interactively, read a page name with completion."
 ENTRY is an alist like those in the entry index of the document,
 possibly with an additional ENTRY.fragment which overrides the
 fragment part of ENTRY.path."
-  (with-current-buffer (get-buffer-create "*devdocs*")
+  (with-current-buffer (get-buffer-create devdocs--buffer-name)
     (unless (eq major-mode 'devdocs-mode)
       (devdocs-mode))
     (let-alist entry
@@ -566,6 +571,80 @@ If INITIAL-INPUT is not nil, insert it into the minibuffer."
   "Read a document from the first page."
   (interactive (list (devdocs--read-document "Peruse documentation: ")))
   (pop-to-buffer (devdocs-goto-page doc 0)))
+
+(defun devdocs--next-error-function (n &optional reset)
+  "A `next-error-function' suitable for *devdocs-grep* buffers."
+  (cl-letf (((symbol-function 'compilation-find-file)
+             (lambda (_marker filename &rest _)
+               ;; Certain markers associated to hits in each file are
+               ;; stored by grep-mode.  Since we erase and reuse the
+               ;; *devdocs* buffer, we need to get rid of them.
+               (maphash (lambda (_ file-struct)
+                          (dolist (tree (compilation--file-struct->loc-tree file-struct))
+                            (when-let ((marker (compilation--loc->marker (assq nil tree))))
+                              (set-marker marker nil))))
+                        compilation-locs)
+               (string-match "\\([^/]*\\)/\\(.*\\)" filename)
+               (devdocs-goto-page (devdocs--doc-metadata (match-string 1 filename))
+                                  (match-string 2 filename)))))
+    (compilation-next-error-function n reset)))
+
+;;;###autoload
+(defun devdocs-grep (docs regexp)
+  "Perform full-text search on a collection of documents."
+  (interactive (list (devdocs--relevant-docs current-prefix-arg)
+                     (read-regexp "Search for regexp: "
+                                  (thing-at-point 'symbol)
+                                  'grep-regexp-history)))
+  (let* ((slugs (mapcar (lambda (doc) (alist-get 'slug doc)) docs))
+         (outbuf (get-buffer-create "*devdocs-grep*"))
+         (pages (mapcan (lambda (doc)
+                          (mapcar (lambda (path) `((doc . ,doc) (path . ,path)))
+                                  (devdocs--index doc 'pages)))
+                        docs))
+         (npages (length pages))
+         (progress (make-progress-reporter "Searching" 0 npages)))
+    (pop-to-buffer outbuf)
+    (let ((inhibit-read-only t))
+      (erase-buffer)
+      (grep-mode)
+      (buffer-disable-undo)
+      (setq-local next-error-function #'devdocs--next-error-function)
+      (insert (format "Search results for ‘%s’ in the following documents: %s.\n\n"
+                      regexp (string-join slugs ", "))))
+    (letrec ((worker (pcase-lambda (`(,page . ,rest))
+                       (unless (buffer-live-p outbuf)
+                         (user-error "Grep buffer killed"))
+                       (progress-reporter-update progress (- npages (length rest) 1))
+                       (with-temp-buffer
+                         (let ((devdocs--buffer-name (current-buffer))
+                               (devdocs-fontify-code-blocks nil))
+                           (devdocs--render page))
+                         (while (re-search-forward regexp nil t)
+                           (goto-char (match-beginning 0))
+                           (end-of-line)
+                           (let* ((text (buffer-substring (line-beginning-position)
+                                                          (point)))
+                                  (result (let-alist page
+                                            (format "%s/%s:%s:%s\n"
+                                                    .doc.slug .path
+                                                    (line-number-at-pos)
+                                                    text))))
+                             (with-current-buffer outbuf
+                               (save-excursion
+                                 (goto-char (point-max))
+                                 (let ((inhibit-read-only t))
+                                   (insert result)))))))
+                       (if rest
+                           (run-with-idle-timer 0.2 nil worker rest)
+                         (progress-reporter-done progress)
+                         (with-current-buffer outbuf
+                           (save-excursion
+                             (goto-char (point-max))
+                             (let ((inhibit-read-only t))
+                               (insert (format "\nSearch finished with %s results.\n"
+                                               compilation-num-errors-found)))))))))
+      (funcall worker pages))))
 
 ;;; Compatibility with the old devdocs package
 
