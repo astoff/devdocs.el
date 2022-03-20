@@ -34,7 +34,6 @@
 
 ;;; Code:
 
-(require 'org-src)
 (require 'seq)
 (require 'shr)
 (require 'url-expand)
@@ -89,6 +88,9 @@ name and a count."
   "Whether to fontify code snippets inside pre tags.
 Fontification is done using the `org-src' library, which see."
   :type 'boolean)
+
+(defface devdocs-code-block '((t nil))
+  "Additional face to apply to code blocks in DevDocs buffers.")
 
 (defvar devdocs-history nil
   "History of documentation entries.")
@@ -421,10 +423,21 @@ Interactively, read a page name with completion."
 (defun devdocs--shr-tag-pre (dom)
   "Insert and fontify pre-tag represented by DOM."
   (let ((start (point)))
-    (shr-tag-pre dom)
-    (when-let ((lang (and devdocs-fontify-code-blocks
-                          (dom-attr dom 'data-language))))
-      (org-src-font-lock-fontify-block (downcase lang) start (point)))))
+    (if-let ((lang (and devdocs-fontify-code-blocks
+                        (dom-attr dom 'data-language)))
+             (mode (or (cdr (assoc lang '(("cpp" . c++-mode)
+                                          ("shell" . sh-mode))))
+                       (intern (concat lang "-mode"))))
+             (buffer (and (fboundp mode) (current-buffer))))
+        (with-temp-buffer
+          (shr-tag-pre dom)
+          (let ((inhibit-message t)
+	        (message-log-max nil))
+            (ignore-errors (delay-mode-hooks (funcall mode)))
+            (font-lock-ensure))
+          (insert-into-buffer buffer))
+      (shr-tag-pre dom))
+    (add-face-text-property start (point) 'devdocs-code-block t)))
 
 (defun devdocs--render (entry)
   "Render a DevDocs documentation entry, returning a buffer.
@@ -436,9 +449,9 @@ fragment part of ENTRY.path."
     (unless (eq major-mode 'devdocs-mode)
       (devdocs-mode))
     (let-alist entry
-      (let ((buffer-read-only nil)
-            (shr-external-rendering-functions (cons '(pre . devdocs--shr-tag-pre)
-                                                    shr-external-rendering-functions))
+      (let ((inhibit-read-only t)
+            (shr-external-rendering-functions `((pre . devdocs--shr-tag-pre)
+                                                ,@shr-external-rendering-functions))
             (file (expand-file-name (format "%s/%s.html"
                                             .doc.slug
                                             (url-hexify-string (devdocs--path-file .path)))
