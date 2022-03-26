@@ -429,13 +429,14 @@ Interactively, read a page name with completion."
                                           ("shell" . sh-mode))))
                        (intern (concat lang "-mode"))))
              (buffer (and (fboundp mode) (current-buffer))))
-        (with-temp-buffer
-          (shr-tag-pre dom)
-          (let ((inhibit-message t)
-	        (message-log-max nil))
-            (ignore-errors (delay-mode-hooks (funcall mode)))
-            (font-lock-ensure))
-          (insert-into-buffer buffer))
+        (insert
+         (with-temp-buffer
+           (shr-tag-pre dom)
+           (let ((inhibit-message t)
+	         (message-log-max nil))
+             (ignore-errors (delay-mode-hooks (funcall mode)))
+             (font-lock-ensure))
+           (buffer-string)))
       (shr-tag-pre dom))
     (add-face-text-property start (point) 'devdocs-code-block t)))
 
