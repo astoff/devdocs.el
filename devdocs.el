@@ -581,6 +581,16 @@ If INITIAL-INPUT is not nil, insert it into the minibuffer."
   (interactive (list (devdocs--read-document "Peruse documentation: ")))
   (pop-to-buffer (devdocs-goto-page doc 0)))
 
+;; Don't show devdocs-mode specific commands in M-x
+(dolist (sym '(devdocs-goto-target devdocs-go-back devdocs-go-forward
+               devdocs-next-entry devdocs-previous-entry devdocs-goto-page
+               devdocs-first-page devdocs-last-page devdocs-next-page
+               devdocs-previous-page devdocs-copy-url))
+  (put sym 'completion-predicate (lambda (_ buffer)
+                                   (provided-mode-derived-p
+                                    (buffer-local-value 'major-mode buffer)
+                                    'devdocs-mode))))
+
 ;;; Compatibility with the old devdocs package
 
 ;;;###autoload
