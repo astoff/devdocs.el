@@ -467,6 +467,7 @@ fragment part of ENTRY.path."
       (set-buffer-modified-p nil)
       (setq-local devdocs-current-docs (list .doc.slug))
       (push entry devdocs--stack)
+      (setq-local list-buffers-directory (format-mode-line devdocs-header-line nil nil (current-buffer)))
       (devdocs-goto-target)
       (current-buffer))))
 
