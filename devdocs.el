@@ -279,6 +279,7 @@ DOC is a document metadata alist."
 
 (define-derived-mode devdocs-mode special-mode "DevDocs"
   "Major mode for viewing DevDocs documents."
+  :interactive nil
   (setq-local
    browse-url-browser-function 'devdocs--browse-url
    buffer-undo-list t
