@@ -29,7 +29,7 @@ It's handy to have a keybinding for the latter command.  One
 possibility, in analogy to =C-h S= (=info-lookup-symbol=), is
 
 #+begin_src elisp
-  (global-set-key (kbd ("C-h D")) 'devdocs-lookup)
+  (global-set-key (kbd "C-h D") 'devdocs-lookup)
 #+end_src
 
 In any given buffer, the first call to =devdocs-lookup= will query for
