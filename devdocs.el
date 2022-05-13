@@ -152,7 +152,7 @@ If necessary, download data from `devdocs-site-url'."
    (with-temp-buffer
      (url-insert-file-contents
       (format "%s/docs.json" devdocs-site-url))
-     (json-read))))
+     (json-parse-buffer :object-type 'alist))))
 
 (defun devdocs--doc-title (doc)
   "Title of document DOC.
@@ -204,15 +204,16 @@ DOC is a document metadata alist."
          pages)
     (with-temp-buffer
       (url-insert-file-contents (format "%s/%s/db.json?%s" devdocs-cdn-url slug mtime))
-      (dolist (entry (let ((json-key-type 'string))
-                       (json-read)))
+      (dolist-with-progress-reporter
+          (entry (json-parse-buffer  :object-type 'alist))
+          "Downloading DevDocs..."
         (with-temp-file (expand-file-name
                          (url-hexify-string (format "%s.html" (car entry))) temp)
           (push (car entry) pages)
           (insert (cdr entry)))))
     (with-temp-buffer
       (url-insert-file-contents (format "%s/%s/index.json?%s" devdocs-cdn-url slug mtime))
-      (let ((index (json-read)))
+      (let ((index (json-parse-buffer :object-type 'alist)))
         (push `(pages . ,(vconcat (nreverse pages))) index)
         (with-temp-file (expand-file-name "index" temp)
           (prin1 index (current-buffer)))))
