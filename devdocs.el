@@ -204,8 +204,10 @@ DOC is a document metadata alist."
          pages)
     (with-temp-buffer
       (url-insert-file-contents (format "%s/%s/db.json?%s" devdocs-cdn-url slug mtime))
-      (dolist (entry (let ((json-key-type 'string))
-                       (json-read)))
+      (dolist-with-progress-reporter
+          (entry (let ((json-key-type 'string))
+                   (json-read)))
+          "Installing documentation..."
         (with-temp-file (expand-file-name
                          (url-hexify-string (format "%s.html" (car entry))) temp)
           (push (car entry) pages)
