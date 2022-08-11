@@ -89,6 +89,10 @@ name and a count."
 Fontification is done using the `org-src' library, which see."
   :type 'boolean)
 
+(defcustom devdocs-window-select nil
+  "Whether to select the DevDocs window for viewing."
+  :type 'boolean)
+
 (defface devdocs-code-block '((t nil))
   "Additional face to apply to code blocks in DevDocs buffers.")
 
@@ -574,10 +578,14 @@ If INITIAL-INPUT is not nil, insert it into the minibuffer."
   (let* ((entry (devdocs--read-entry "Go to documentation: "
                                      (devdocs--relevant-docs ask-docs)
                                      initial-input))
-         (buffer (devdocs--render entry)))
-    (with-selected-window (display-buffer buffer)
-      (devdocs-goto-target)
-      (recenter 0))))
+         (buffer (devdocs--render entry))
+         (window (display-buffer buffer)))
+    (when window
+      (with-selected-window window
+        (devdocs-goto-target)
+        (recenter 0))
+      (when devdocs-window-select
+        (select-window window)))))
 
 ;;;###autoload
 (defun devdocs-peruse (doc)
