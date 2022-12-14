@@ -559,9 +559,9 @@ INITIAL-INPUT is passed to `completing-read'"
                  (if (eq action 'metadata)
                      metadata
                    (complete-with-action action cands string predicate))))
+         (default (car (member (thing-at-point 'symbol) cands)))
          (cand (completing-read prompt coll nil t initial-input
-                                'devdocs-history
-                                (thing-at-point 'symbol))))
+                                'devdocs-history default)))
     (devdocs--get-data (car (member cand cands)))))
 
 ;;;###autoload
