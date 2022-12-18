@@ -562,7 +562,8 @@ INITIAL-INPUT is passed to `completing-read'"
          (cand (completing-read prompt coll nil t initial-input
                                 'devdocs-history
                                 (thing-at-point 'symbol))))
-    (devdocs--get-data (car (member cand cands)))))
+    (devdocs--get-data (or (car (member cand cands))
+                           (user-error "Not an entry!")))))
 
 ;;;###autoload
 (defun devdocs-lookup (&optional ask-docs initial-input)
