@@ -288,6 +288,7 @@ DOC is a document metadata alist."
   :interactive nil
   (setq-local
    browse-url-browser-function 'devdocs--browse-url
+   browse-url-handlers nil
    buffer-undo-list t
    header-line-format devdocs-header-line
    revert-buffer-function 'devdocs--revert-buffer
