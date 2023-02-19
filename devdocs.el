@@ -286,11 +286,19 @@ DOC is a document metadata alist."
 (define-derived-mode devdocs-mode special-mode "DevDocs"
   "Major mode for viewing DevDocs documents."
   :interactive nil
+  (if (boundp 'browse-url-handlers) ;; Emacs ≥ 28
+      (setq-local browse-url-handlers
+                  `((devdocs--internal-url-p . devdocs--internal-url-handler)
+                    ,@browse-url-handlers))
+    (setq-local browse-url-browser-function
+                `(("\\`[^:]+\\'" . devdocs--internal-url-handler)
+                  ,@(if (functionp browse-url-browser-function)
+                        `(("" . ,browse-url-browser-function))
+                      browse-url-browser-function))))
   (setq-local
-   browse-url-browser-function 'devdocs--browse-url
    buffer-undo-list t
    header-line-format devdocs-header-line
-   revert-buffer-function 'devdocs--revert-buffer
+   revert-buffer-function #'devdocs--revert-buffer
    truncate-lines t))
 
 (defun devdocs-goto-target ()
@@ -482,25 +490,24 @@ fragment part of ENTRY.path."
   "Refresh DevDocs buffer."
   (devdocs--render (pop devdocs--stack)))
 
-(defun devdocs--browse-url (url &rest args)
-  "A suitable `browse-url-browser-function' for `devdocs-mode'.
-URL can be an internal link in a DevDocs document.
-ARGS is passed as is to `browse-url'."
-  (if (string-match-p ":" url)
-      (let ((browse-url-browser-function (default-value 'browse-url-browser-function)))
-        (apply #'browse-url url args))
-    (let-alist (car devdocs--stack)
-      (let* ((dest (devdocs--path-expand url .path))
-             (file (devdocs--path-file dest))
-             (frag (devdocs--path-fragment dest))
-             (entry (seq-find (lambda (it)
-                                (let-alist it
-                                  (or (string= .path dest)
-                                      (string= .path file))))
-                              (devdocs--index .doc 'entries))))
-        (unless entry (error "Can't find `%s'" dest))
-        (when frag (push `(fragment . ,frag) entry))
-        (devdocs--render entry)))))
+(defun devdocs--internal-url-p (url)
+  "Return t if URL seems to be an internal DevDocs link."
+  (not (string-match-p "\\`[a-z]+:" url)))
+
+(defun devdocs--internal-url-handler (url &rest _)
+  "Open URL of an internal link in a DevDocs document."
+  (let-alist (car devdocs--stack)
+    (let* ((dest (devdocs--path-expand url .path))
+           (file (devdocs--path-file dest))
+           (frag (devdocs--path-fragment dest))
+           (entry (seq-find (lambda (it)
+                              (let-alist it
+                                (or (string= .path dest)
+                                    (string= .path file))))
+                            (devdocs--index .doc 'entries))))
+      (unless entry (error "Can't find `%s'" dest))
+      (when frag (push `(fragment . ,frag) entry))
+      (devdocs--render entry))))
 
 ;;; Lookup commands
 
