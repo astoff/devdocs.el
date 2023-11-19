@@ -1,7 +1,9 @@
 #+title: devdocs.el --- Emacs viewer for DevDocs
 
+#+html: <p align="center">
 #+html: <a href="http://elpa.gnu.org/packages/devdocs.html"><img alt="GNU ELPA" src="https://elpa.gnu.org/packages/devdocs.svg"/></a>
 #+html: <a href="https://melpa.org/#/devdocs"><img alt="MELPA" src="https://melpa.org/packages/devdocs-badge.svg"/></a>
+#+html: </p>
 
 devdocs.el is a documentation viewer for Emacs similar to the built-in
 Info browser, but geared towards documentation distributed by the
@@ -9,16 +11,15 @@ Info browser, but geared towards documentation distributed by the
 different software components.
 
 The stable version of the package is available from [[https://elpa.gnu.org/packages/devdocs.html][GNU ELPA]] and a
-development version is available from [[https://melpa.org/#/devdocs][MELPA]]; to install, type =M-x
-package-install RET devdocs=.
+development version is available from [[https://melpa.org/#/devdocs][MELPA]]; to install, type
+=M-x package-install RET devdocs=.
 
-#+caption: Reading and looking up documentation entries.
-[[https://raw.githubusercontent.com/astoff/devdocs.el/images/screenshot.png]]
+#+html: <img alt="Reading and looking up documentation entries" src="https://raw.githubusercontent.com/astoff/devdocs.el/images/screenshot.png"/>
 
 ** Basic usage
 
-To get started, download some documentation with =M-x
-devdocs-install=.  This will query https://devdocs.io for the
+To get started, download some documentation with
+=M-x devdocs-install=.  This will query https://devdocs.io for the
 available documents and save the selected one to disk.  To read the
 installed documentation, there are two options:
 
