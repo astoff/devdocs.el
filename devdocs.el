@@ -199,10 +199,15 @@ DOC is a document metadata alist."
 ;;;###autoload
 (defun devdocs-install (doc)
   "Download and install DevDocs documentation.
-DOC is a document metadata alist."
+DOC is a document slug or metadata alist.  If the document is
+already installed, reinstall it."
   (interactive (list (devdocs--read-document "Install documentation: " nil t)))
   (make-directory devdocs-data-dir t)
-  (let* ((slug (alist-get 'slug doc))
+  (let* ((doc (or (listp doc)
+                  (seq-find (lambda (it) (string= doc (alist-get 'slug it)))
+                            (devdocs--available-docs))
+                  (user-error "No such document: %s" doc)))
+         (slug (alist-get 'slug doc))
          (mtime (alist-get 'mtime doc))
          (temp (make-temp-file "devdocs-" t))
          pages)
