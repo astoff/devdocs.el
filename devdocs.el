@@ -336,7 +336,7 @@ with the order of appearance in the text."
            (current (seq-position entries nil pred)))
       (unless current (user-error "No current entry"))
       (devdocs--render
-       (or (ignore-error 'args-out-of-range (elt entries (+ count current)))
+       (or (ignore-error args-out-of-range (elt entries (+ count current)))
            (user-error "No %s entry" (if (< count 0) "previous" "next")))))))
 
 (defun devdocs-previous-entry (count)
