@@ -38,7 +38,8 @@
 (require 'shr)
 (require 'url-expand)
 (eval-when-compile
-  (require 'let-alist))
+  (require 'let-alist)
+  (require 'subr-x))
 
 (unless (libxml-available-p)
   (display-warning 'devdocs "This package requires Emacs to be compiled with libxml2"))
@@ -436,7 +437,8 @@ Interactively, read a page name with completion."
   (pcase (string-to-char path)
     ('?/ path)
     ('?# (concat (devdocs--path-file base) path))
-    (_ (seq-rest ;; drop leading slash
+    (_ (string-remove-prefix
+        "/"
         (url-expander-remove-relative-links ;; undocumented function!
          (concat (file-name-directory base) path))))))
 
