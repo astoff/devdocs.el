@@ -485,7 +485,7 @@ fragment part of ENTRY.path."
                                             (url-hexify-string (devdocs--path-file .path)))
                                     devdocs-data-dir)))
         (erase-buffer)
-        (setq-local shr-target-id (or .fragment (devdocs--path-fragment .path)))
+        (setq-local shr-target-id (url-unhex-string (or .fragment (devdocs--path-fragment .path))))
         ;; TODO: cl-progv here for shr settings?
         (shr-insert-document
          (with-temp-buffer
