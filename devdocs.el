@@ -82,7 +82,7 @@ name and a count."
   :type '(choice (const :tag "Count in parentheses, italicized"
                         #("%s (%s)" 3 7 (face italic)))
                  (const :tag "Invisible cookie"
-                        #("%s (%s)" 2 7 (invisible t)))
+                        #("%s#%s" 2 5 (invisible t)))
                  string))
 
 (defcustom devdocs-fontify-code-blocks t
