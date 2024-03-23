@@ -1,12 +1,12 @@
 ;;; devdocs.el --- Emacs viewer for DevDocs -*- lexical-binding: t -*-
 
-;; Copyright (C) 2021  Free Software Foundation, Inc.
+;; Copyright (C) 2021-2024  Free Software Foundation, Inc.
 
 ;; Author: Augusto Stoffel <arstoffel@gmail.com>
 ;; Keywords: help
 ;; URL: https://github.com/astoff/devdocs.el
 ;; Package-Requires: ((emacs "27.1"))
-;; Version: 0.5
+;; Version: 0.6
 
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
