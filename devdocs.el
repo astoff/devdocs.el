@@ -184,7 +184,7 @@ Return a document metadata alist if MULTIPLE is nil; otherwise, a
 list of metadata alists."
   (let ((cands (mapcar (lambda (it) (cons (alist-get 'slug it) it))
                        (if available
-                           (devdocs--available-docs)
+                           (seq-difference (devdocs--available-docs) (devdocs--installed-docs))
                          (or (devdocs--installed-docs)
                              (user-error "No documents in `%s'" devdocs-data-dir))))))
     (if multiple
