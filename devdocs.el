@@ -310,7 +310,8 @@ already installed, reinstall it."
    buffer-undo-list t
    header-line-format devdocs-header-line
    revert-buffer-function #'devdocs--revert-buffer
-   truncate-lines t))
+   truncate-lines t
+   bookmark-make-record-function #'devdocs-bookmark-make-record))
 
 (defun devdocs-goto-target ()
   "Go to the original position in a DevDocs buffer."
@@ -636,6 +637,28 @@ If INITIAL-INPUT is not nil, insert it into the minibuffer."
                       (format "Search %s: " devdocs-site-url)
                       nil nil nil nil (thing-at-point 'symbol))))
   (browse-url (format "%s/#q=%s" devdocs-site-url (url-hexify-string query))))
+
+;;; Integrate with bookmark
+
+(declare-function bookmark-prop-get "bookmark" (bookmark prop))
+
+(defun devdocs--bookmark-jump (bookmark)
+  "BOOKMARK handler for devdocs pages."
+  (pop-to-buffer (devdocs-goto-page
+                  (bookmark-prop-get bookmark 'devdocs-doc)
+                  (bookmark-prop-get bookmark 'devdocs-path))))
+
+(defun devdocs-bookmark-make-record ()
+  "This implements the `bookmark-make-record-function' type for a devdocs page."
+  (let-alist (or (car devdocs--stack)
+		 (user-error "Not in a DevDocs buffer"))
+    (let* ((title (concat .doc.slug "/" .path))
+           (bookmark-name (concat "devdocs/" title)))
+      `(,bookmark-name . ((defaults . (,title))
+                          (handler . devdocs--bookmark-jump)
+                          (buf . "*devdocs*")
+                          (devdocs-doc . ,.doc)
+                          (devdocs-path . ,.path))))))
 
 (provide 'devdocs)
 ;;; devdocs.el ends here
