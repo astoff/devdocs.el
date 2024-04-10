@@ -94,6 +94,9 @@ Fontification is done using the `org-src' library, which see."
   "Whether to select the DevDocs window for viewing."
   :type 'boolean)
 
+(defvar devdocs-extra-rendering-functions '()
+  "Extra functions for `shr-external-rendering-functions'.")
+
 (defface devdocs-code-block '((t nil))
   "Additional face to apply to code blocks in DevDocs buffers.")
 
@@ -480,13 +483,17 @@ fragment part of ENTRY.path."
     (unless (eq major-mode 'devdocs-mode)
       (devdocs-mode))
     (let-alist entry
-      (let ((inhibit-read-only t)
-            (shr-external-rendering-functions `((pre . devdocs--shr-tag-pre)
-                                                ,@shr-external-rendering-functions))
-            (file (expand-file-name (format "%s/%s.html"
-                                            .doc.slug
-                                            (url-hexify-string (devdocs--path-file .path)))
-                                    devdocs-data-dir)))
+      (let* ((inhibit-read-only t)
+             (extra-rendering-functions (cdr (assoc
+                                              (intern .doc.type)
+                                              devdocs-extra-rendering-functions)))
+             (shr-external-rendering-functions `((pre . devdocs--shr-tag-pre)
+                                                 ,@extra-rendering-functions
+                                                 ,@shr-external-rendering-functions))
+             (file (expand-file-name (format "%s/%s.html"
+                                             .doc.slug
+                                             (url-hexify-string (devdocs--path-file .path)))
+                                     devdocs-data-dir)))
         (erase-buffer)
         ;; TODO: cl-progv here for shr settings?
         (shr-insert-document
