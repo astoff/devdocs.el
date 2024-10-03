@@ -432,6 +432,34 @@ Interactively, read a page name with completion."
   (define-key map "w" #'devdocs-copy-url)
   (define-key map "." #'devdocs-goto-target))
 
+(easy-menu-define devdocs-mode-menu devdocs-mode-map
+  "Menu for `devdocs-mode'."
+  '("DevDocs"
+    ["Go to Entry" devdocs-lookup
+     :help "Select and jump to an index entry"]
+    ["Previous Entry" devdocs-previous-entry
+     :help "Go to the previous documentation entry according to index order"]
+    ["Next Entry" devdocs-next-entry
+     :help "Go to the next documentation entry according to index order"]
+    "---"
+    ["Go to Page" devdocs-goto-page
+     :help "Select and jump to a page"]
+    ["First Page" devdocs-first-page
+     :help "Go to the first document page"]
+    ["Previous Page" devdocs-previous-page
+     :help "Go to the previous document page"]
+    ["Next Page" devdocs-next-page
+     :help "Go to the next document page"]
+    ["Last Page" devdocs-last-page
+     :help "Go to the last document page"]
+    "---"
+    ["Back in History" devdocs-go-back
+     :active (cadr devdocs--stack)
+     :help "Go to a previously displayed documentation entry"]
+    ["Forward in History" devdocs-go-forward
+     :active (car devdocs--forward-stack)
+     :help "Return from a previously displayed documentation entry"]))
+
 ;;; Rendering
 
 (defun devdocs--path-file (path)
