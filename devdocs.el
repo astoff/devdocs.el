@@ -94,9 +94,6 @@ Fontification is done using the `org-src' library, which see."
   "Whether to select the DevDocs window for viewing."
   :type 'boolean)
 
-(defvar devdocs-extra-rendering-functions '()
-  "Extra functions for `shr-external-rendering-functions'.")
-
 (defface devdocs-code-block '((t nil))
   "Additional face to apply to code blocks in DevDocs buffers.")
 
@@ -105,6 +102,26 @@ Fontification is done using the `org-src' library, which see."
 
 (defconst devdocs--data-format-version 1
   "Version number of the saved documentation data format.")
+
+(defvar devdocs--rendering-functions '((t (math . devdocs--tag-math)
+                                          (pre . devdocs--tag-pre)))
+  "Extra functions for `shr-external-rendering-functions'.
+This is an alist whose keys are a document slug, a document type, or the
+wildcard t.  When a document is rendered, all matching entries are
+collected and appended to `shr-external-rendering-functions'.
+
+For example, to modify how hyperlinks are rendered in the elisp
+document, you can use:
+
+  (push \\='(a . my-custom-renderer)
+        (alist-get \\='elisp devdocs--rendering-functions))
+
+Feel free to experiment with this feature, but note that the API is
+experimental and may change in the future.")
+
+(make-obsolete-variable 'devdocs-extra-rendering-functions
+                        'devdocs--rendering-functions
+                        "0.7")
 
 ;;; Memoization
 
@@ -315,6 +332,10 @@ already installed, reinstall it."
    revert-buffer-function #'devdocs--revert-buffer
    truncate-lines t))
 
+(defun devdocs--revert-buffer (&rest _args)
+  "Refresh DevDocs buffer."
+  (devdocs--render (pop devdocs--stack)))
+
 (defun devdocs-goto-target ()
   "Go to the original position in a DevDocs buffer."
   (interactive)
@@ -460,7 +481,7 @@ Interactively, read a page name with completion."
      :active (car devdocs--forward-stack)
      :help "Return from a previously displayed documentation entry"]))
 
-;;; Rendering
+;;; HTML rendering
 
 (defun devdocs--path-file (path)
   "Return the non-fragment part of PATH."
@@ -481,26 +502,6 @@ Interactively, read a page name with completion."
         (url-expander-remove-relative-links ;; undocumented function!
          (concat (file-name-directory base) path))))))
 
-(defun devdocs--shr-tag-pre (dom)
-  "Insert and fontify pre-tag represented by DOM."
-  (let ((start (point)))
-    (if-let ((lang (and devdocs-fontify-code-blocks
-                        (dom-attr dom 'data-language)))
-             (mode (or (cdr (assoc lang '(("cpp" . c++-mode)
-                                          ("shell" . sh-mode))))
-                       (intern (concat lang "-mode"))))
-             (buffer (and (fboundp mode) (current-buffer))))
-        (insert
-         (with-temp-buffer
-           (shr-tag-pre dom)
-           (let ((inhibit-message t)
-	         (message-log-max nil))
-             (ignore-errors (delay-mode-hooks (funcall mode)))
-             (font-lock-ensure))
-           (buffer-string)))
-      (shr-tag-pre dom))
-    (add-face-text-property start (point) 'devdocs-code-block t)))
-
 (defun devdocs--render (entry)
   "Render a DevDocs documentation entry, returning a buffer.
 
@@ -512,12 +513,16 @@ fragment part of ENTRY.path."
       (devdocs-mode))
     (let-alist entry
       (let* ((inhibit-read-only t)
-             (extra-rendering-functions (cdr (assoc
-                                              (intern .doc.type)
-                                              devdocs-extra-rendering-functions)))
-             (shr-external-rendering-functions `((pre . devdocs--shr-tag-pre)
-                                                 ,@extra-rendering-functions
-                                                 ,@shr-external-rendering-functions))
+             (shr-external-rendering-functions
+              (append
+               (alist-get .doc.slug
+                          devdocs--rendering-functions
+                          nil nil #'string=)
+               (alist-get .doc.type
+                          devdocs--rendering-functions
+                          nil nil #'string=)
+               (alist-get t devdocs--rendering-functions)
+               shr-external-rendering-functions))
              (file (expand-file-name (format "%s/%s.html"
                                              .doc.slug
                                              (url-hexify-string (devdocs--path-file .path)))
@@ -537,10 +542,6 @@ fragment part of ENTRY.path."
       (devdocs-goto-target)
       (current-buffer))))
 
-(defun devdocs--revert-buffer (&rest _args)
-  "Refresh DevDocs buffer."
-  (devdocs--render (pop devdocs--stack)))
-
 (defun devdocs--internal-url-p (url)
   "Return t if URL seems to be an internal DevDocs link."
   (not (string-match-p "\\`[a-z]+:" url)))
@@ -559,6 +560,35 @@ fragment part of ENTRY.path."
       (unless entry (error "Can't find `%s'" dest))
       (when frag (push `(fragment . ,frag) entry))
       (devdocs--render entry))))
+
+(defun devdocs--tag-pre (dom)
+  "Insert and fontify pre tag represented by DOM."
+  (let ((start (point)))
+    (if-let ((lang (and devdocs-fontify-code-blocks
+                        (dom-attr dom 'data-language)))
+             (mode (or (cdr (assoc lang '(("cpp" . c++-mode)
+                                          ("shell" . sh-mode))))
+                       (intern (concat lang "-mode"))))
+             (buffer (and (fboundp mode) (current-buffer))))
+        (insert
+         (with-temp-buffer
+           (shr-tag-pre dom)
+           (let ((inhibit-message t)
+	         (message-log-max nil))
+             (ignore-errors (delay-mode-hooks (funcall mode)))
+             (font-lock-ensure))
+           (buffer-string)))
+      (shr-tag-pre dom))
+    (add-face-text-property start (point) 'devdocs-code-block t)))
+
+(defun devdocs--tag-math (dom)
+  "Insert math tag represented by DOM."
+  (if-let ((annot (thread-first
+                    dom
+                    (dom-child-by-tag 'semantics)
+                    (dom-child-by-tag 'annotation))))
+      (shr-generic annot)
+    (shr-generic dom)))
 
 ;;; Lookup commands
 
