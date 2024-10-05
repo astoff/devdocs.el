@@ -62,6 +62,14 @@ Documents are installed under =devdocs-data-dir=, which defaults to
 =~/.emacs.d/devdocs=.  To completely uninstall the package, remove
 this directory.
 
+** Customization
+
+Run =M-x customize-group RET devdocs RET= to see a listing of
+customization options.
+
+Before enabling rendering of mathematical formulas, make sure that you
+have [[https://nodejs.org/][Node.js]] installed and run =M-x devdocs-mathjax-setup=.
+
 ** Setting the default documents for a collection of buffers
 
 You may wish to select a predefined list of documents in all buffers
