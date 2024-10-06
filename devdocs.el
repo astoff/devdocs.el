@@ -5,7 +5,7 @@
 ;; Author: Augusto Stoffel <arstoffel@gmail.com>
 ;; Keywords: help
 ;; URL: https://github.com/astoff/devdocs.el
-;; Package-Requires: ((emacs "27.1") ("compat 29.1"))
+;; Package-Requires: ((emacs "27.1") (compat "29.1"))
 ;; Version: 0.6.1
 
 ;; This program is free software; you can redistribute it and/or modify
