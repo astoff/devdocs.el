@@ -5,7 +5,7 @@
 ;; Author: Augusto Stoffel <arstoffel@gmail.com>
 ;; Keywords: help
 ;; URL: https://github.com/astoff/devdocs.el
-;; Package-Requires: ((emacs "27.1") (compat "29.1"))
+;; Package-Requires: ((emacs "27.1") (compat "29.1") (mathjax "0.1"))
 ;; Version: 0.6.1
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -34,6 +34,7 @@
 
 ;;; Code:
 
+(require 'mathjax)
 (require 'seq)
 (require 'shr)
 (require 'url-expand)
@@ -123,7 +124,7 @@ experimental and may change in the future.")
                         'devdocs--rendering-functions
                         "0.7")
 
-(defcustom devdocs-use-mathjax nil
+(defcustom devdocs-use-mathjax (mathjax-available-p)
   "Whether to render mathematical formulas using MathJax.
 Set this to `block' to render only displayed formulas.  Any other
 non-nil value means to render displayed as well as inline formulas.
@@ -602,120 +603,10 @@ fragment part of ENTRY.path."
     (when (pcase devdocs-use-mathjax
             ('block (string= (dom-attr dom 'display) 'block))
             (_ devdocs-use-mathjax))
-      (devdocs--render-math start (point) dom))))
-
-;;; Math rendering
-;; TODO: Split off as a separate package?
-
-(defvar devdocs--mathjax nil
-  "Place to store the MathJax process state.")
-
-(defvar devdocs--mathjax-ttl 60
-  "Time to let the MathJax process live without producing output.")
-
-(defvar devdocs--math-image-props '(:ascent 75)
-  "Image properties of rendered math formulas, as accepted by `create-image'.")
-
-(defvar devdocs--mathjax-directory (expand-file-name ".mathjax" devdocs-data-dir)
-  "Directory where MathJax should be installed.
-This is used by `devdocs-setup-mathjax'.  You may also chose to not run
-that command and set this variable to any directory in which Node is
-able to import the `mathjax-node' library.")
-
-(defun devdocs-setup-mathjax ()
-  "Install dependencies of the `devdocs-use-mathjax' feature."
-  (interactive)
-  (mkdir devdocs--mathjax-directory t)
-  (let ((default-directory devdocs--mathjax-directory)
-        (inhibit-read-only t))
-    (if (not (executable-find "node"))
-        (lwarn 'devdocs :error
-               "Math rendering in DevDocs requires the Node program.")
-      (with-current-buffer
-          (compile "npm install --prefix . mathjax-node")
-        (goto-char (pos-bol 0))
-        (insert "⚠️ After installation finishes, customize "
-                (buttonize "devdocs-use-mathjax"
-                           #'customize-variable
-                           'devdocs-use-mathjax)
-                " to enable math rendering in DevDocs.")
-        (fill-paragraph)
-        (insert ?\n ?\n)))))
-
-(defun devdocs--get-mathjax ()
-  "Return a cons cell consisting of a MathJax process and a list of callbacks."
-  (unless (process-live-p (car devdocs--mathjax))
-    (setq devdocs--mathjax nil))
-  (with-memoization devdocs--mathjax
-    (let* ((default-directory devdocs--mathjax-directory)
-           (buffer (generate-new-buffer " *devdocs-mathjax*"))
-           (proc
-            (make-process
-             :name "mathjax"
-             :buffer buffer
-             :connection-type 'pipe
-             :noquery t
-             :command
-             `("node" "-e" "\
-const mathjax = require('mathjax-node')
-require('readline').createInterface(process.stdin).on('line', line => {
-  mathjax.typeset(JSON.parse(line), data => {
-    process.stdout.write(JSON.stringify(data))})})")
-             :sentinel
-             (lambda (proc _)
-               (cond
-                ((process-live-p proc))
-                ((zerop (process-exit-status proc)) (kill-buffer buffer))
-                (t (lwarn 'devdocs :error
-                          (format "\
-MathJax process exited with status %s.  See buffer %s for more information."
-                                  (process-exit-status proc)
-                                  (buttonize (buffer-name buffer)
-                                             #'pop-to-buffer
-                                             buffer))))))))
-           (timer (run-at-time devdocs--mathjax-ttl nil
-                               (lambda ()
-                                 (setq devdocs--mathjax nil)
-                                 (process-send-eof proc)))))
-      (add-function
-       :after (process-filter proc)
-       (lambda (&rest _)
-         (goto-char (point-min))
-         (while-let ((data (ignore-errors
-                             (json-parse-buffer :object-type 'alist)))
-                     (callback (pop (cdr devdocs--mathjax))))
-           (funcall callback data))
-         (delete-region (point-min) (point))
-         (timer-set-time timer (time-add nil devdocs--mathjax-ttl))))
-      (list proc))))
-
-(defun devdocs--render-math (start end dom)
-  (let* ((start (copy-marker start))
-         (end (copy-marker end))
-         (mathjax (devdocs--get-mathjax))
-         (proc (car mathjax))
-         (arg `(:math
-                ,(with-temp-buffer (dom-print dom nil t)
-                                   (buffer-string))
-                :format "MathML"
-                :svg t))
-         (buffer (current-buffer)))
-    (set-marker-insertion-type start t)
-    (process-send-string proc (json-serialize arg))
-    (process-send-string proc "\n")
-    (nconc mathjax
-           (list
-            (lambda (data)
-              (let-alist data
-                (when (and .svg
-                           (buffer-live-p buffer)
-                           (< start end)) ;funky erase-buffer detection
-                  (with-current-buffer buffer
-                    (let ((inhibit-read-only t)
-                          (image (apply #'svg-image .svg
-                                        devdocs--math-image-props)))
-                      (add-text-properties start end
-                                           `(display ,image)))))))))))
+      (mathjax-display start (point) dom
+                       :after (unless (and (boundp 'shr-fill-text) ;Emacs≥30
+                                           (not shr-fill-text))
+                                #'mathjax-refill-hack)))))
 
 ;;; Lookup commands
 
