@@ -5,7 +5,7 @@
 ;; Author: Augusto Stoffel <arstoffel@gmail.com>
 ;; Keywords: help
 ;; URL: https://github.com/astoff/devdocs.el
-;; Package-Requires: ((emacs "27.1") (compat "29.1") (mathjax "0.1"))
+;; Package-Requires: ((emacs "27.1") (compat "29.1"))
 ;; Version: 0.6.1
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -34,7 +34,6 @@
 
 ;;; Code:
 
-(require 'mathjax)
 (require 'seq)
 (require 'shr)
 (require 'url-expand)
@@ -124,7 +123,10 @@ experimental and may change in the future.")
                         'devdocs--rendering-functions
                         "0.7")
 
-(defcustom devdocs-use-mathjax (mathjax-available-p)
+(defcustom devdocs-use-mathjax
+  (if (fboundp 'mathjax-available-p)
+      (mathjax-available-p)
+    nil)
   "Whether to render mathematical formulas using MathJax.
 Set this to `block' to render only displayed formulas.  Any other
 non-nil value means to render displayed as well as inline formulas.
@@ -603,6 +605,7 @@ fragment part of ENTRY.path."
     (when (pcase devdocs-use-mathjax
             ('block (string= (dom-attr dom 'display) 'block))
             (_ devdocs-use-mathjax))
+      (require 'mathjax)
       (mathjax-display start (point) dom
                        :after (unless (and (boundp 'shr-fill-text) ;Emacs≥30
                                            (not shr-fill-text))
