@@ -147,11 +147,11 @@ time span specified by `devdocs-cache-timeout'.
 
 Note that the lexical environment is used to associate BODY to
 its return value; take the necessary precautions."
-  `(if-let ((fun (lambda () ,@body))
-            (funrep ,(if (< emacs-major-version 28) ;; Cf. bug#32503
-                         '(prin1-to-string fun)
-                       'fun))
-            (data (gethash funrep devdocs--cache)))
+  `(if-let* ((fun (lambda () ,@body))
+             (funrep ,(if (< emacs-major-version 28) ;; Cf. bug#32503
+                          '(prin1-to-string fun)
+                        'fun))
+             (data (gethash funrep devdocs--cache)))
        (prog1 (cdr data)
          (timer-set-time (car data) (time-add nil devdocs-cache-timeout)))
      (let ((val (funcall fun))
@@ -278,20 +278,20 @@ already installed, reinstall it."
 (defun devdocs-update-all ()
   "Reinstall all documents with a new version available."
   (interactive)
-  (when-let ((installed (when (file-directory-p devdocs-data-dir)
-                          (directory-files devdocs-data-dir nil "^[^.]")))
-             (newer (seq-filter
-                     (lambda (doc)
-                       (let-alist doc
-                         (and (member .slug installed)
-                              (< (alist-get 'mtime
-                                            (ignore-errors (devdocs--doc-metadata .slug))
-                                            0) ;; Update docs with an old data format too
-                                 .mtime))))
-                     (devdocs--available-docs)))
-             ((y-or-n-p (format "Update %s documents %s?"
-                                (length newer)
-                                (mapcar (lambda (d) (alist-get 'slug d)) newer)))))
+  (when-let* ((installed (when (file-directory-p devdocs-data-dir)
+                           (directory-files devdocs-data-dir nil "^[^.]")))
+              (newer (seq-filter
+                      (lambda (doc)
+                        (let-alist doc
+                          (and (member .slug installed)
+                               (< (alist-get 'mtime
+                                             (ignore-errors (devdocs--doc-metadata .slug))
+                                             0) ;; Update docs with an old data format too
+                                  .mtime))))
+                      (devdocs--available-docs)))
+              ((y-or-n-p (format "Update %s documents %s?"
+                                 (length newer)
+                                 (mapcar (lambda (d) (alist-get 'slug d)) newer)))))
     (dolist (doc newer)
       (devdocs-install doc))))
 
@@ -352,11 +352,11 @@ already installed, reinstall it."
   "Go to the original position in a DevDocs buffer."
   (interactive)
   (goto-char (point-min))
-  (when-let ((frag (let-alist (car devdocs--stack)
-                     (or .fragment (devdocs--path-fragment .path))))
-             (shr-target-id (url-unhex-string frag))
-             (pred (if (fboundp 'shr--set-target-ids) #'member t)) ;; shr change in Emacs 29
-             (match (text-property-search-forward 'shr-target-id shr-target-id pred)))
+  (when-let* ((frag (let-alist (car devdocs--stack)
+                      (or .fragment (devdocs--path-fragment .path))))
+              (shr-target-id (url-unhex-string frag))
+              (pred (if (fboundp 'shr--set-target-ids) #'member t)) ;; shr change in Emacs 29
+              (match (text-property-search-forward 'shr-target-id shr-target-id pred)))
     (goto-char (prop-match-beginning match))))
 
 (defun devdocs-go-back ()
@@ -501,7 +501,7 @@ Interactively, read a page name with completion."
 
 (defun devdocs--path-fragment (path)
   "Return the fragment part of PATH, or nil if absent."
-  (when-let ((i (string-match "#" path)))
+  (when-let* ((i (string-match "#" path)))
     (substring path (1+ i))))
 
 (defun devdocs--path-expand (path base)
@@ -576,12 +576,12 @@ fragment part of ENTRY.path."
 (defun devdocs--tag-pre (dom)
   "Insert and fontify pre tag represented by DOM."
   (let ((start (point)))
-    (if-let ((lang (and devdocs-fontify-code-blocks
-                        (dom-attr dom 'data-language)))
-             (mode (or (cdr (assoc lang '(("cpp" . c++-mode)
-                                          ("shell" . sh-mode))))
-                       (intern (concat lang "-mode"))))
-             (buffer (and (fboundp mode) (current-buffer))))
+    (if-let* ((lang (and devdocs-fontify-code-blocks
+                         (dom-attr dom 'data-language)))
+              (mode (or (cdr (assoc lang '(("cpp" . c++-mode)
+                                           ("shell" . sh-mode))))
+                        (intern (concat lang "-mode"))))
+              (buffer (and (fboundp mode) (current-buffer))))
         (insert
          (with-temp-buffer
            (shr-tag-pre dom)
