@@ -34,7 +34,7 @@
 
 ;;; Code:
 
-(require 'mathjax)
+(require 'mathjax nil t)
 (require 'seq)
 (require 'shr)
 (require 'url-expand)
