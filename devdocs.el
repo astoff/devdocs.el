@@ -76,6 +76,10 @@ directory-local variable."
   "String used to format a documentation location, e.g. in header line."
   :type 'string)
 
+(defcustom devdocs-annotation-separator (if (char-displayable-p ?—) " ——— " " --- ")
+  "String used to separate annotations from completion candidates."
+  :type 'string)
+
 (defcustom devdocs-disambiguated-entry-format #("%s (%s)" 3 7 (face italic))
   "How to disambiguate entries with identical names in `devdocs-lookup'.
 This string is passed to `format' with two arguments, the entry
@@ -205,6 +209,31 @@ document."
   (let-alist (if (stringp doc) (devdocs--doc-metadata doc) doc)
     (if (seq-empty-p .version) .name (concat .name " " .version))))
 
+(defun devdocs--get-data (str)
+  "Get data stored as a string property in STR."
+  (get-text-property 0 'devdocs--data str))
+
+(defun devdocs--annotate-document (cand)
+  "Return the version information for `devdocs--read-document' candidate CAND."
+  (let-alist (devdocs--get-data cand)
+    (and (not (string= .release .version)) .release)))
+
+(defun devdocs--builtin-annotate-document (cand)
+  "Return an annotation for `devdocs--read-document' candidate CAND."
+  (when-let ((release (devdocs--annotate-document cand)))
+    (concat devdocs-annotation-separator release)))
+
+(defun devdocs--marginalia-annotate-document (cand)
+  "Return a Marginalia annotation for `devdocs--read-document' candidate CAND."
+  (when-let ((release (devdocs--annotate-document cand)))
+    (concat (propertize " " 'marginalia--align t)
+            marginalia-separator
+            (propertize release 'face 'marginalia-version))))
+
+(with-eval-after-load 'marginalia
+  (add-to-list 'marginalia-annotators
+               '(devdocs-document devdocs--marginalia-annotate-document builtin none)))
+
 (defun devdocs--read-document (prompt &optional multiple available)
   "Query interactively for a DevDocs document.
 
@@ -215,15 +244,20 @@ otherwise, offer only installed documents.
 
 Return a document metadata alist if MULTIPLE is nil; otherwise, a
 list of metadata alists."
-  (let ((cands (mapcar (lambda (it) (cons (alist-get 'slug it) it))
+  (let ((completion-extra-properties
+         `( :category devdocs-document
+            :annotation-function ,#'devdocs--builtin-annotate-document))
+        (cands (mapcar (lambda (it)
+                         (propertize (devdocs--doc-title it) 'devdocs--data it))
                        (if available
                            (devdocs--available-docs)
                          (or (devdocs--installed-docs)
                              (user-error "No documents in `%s'" devdocs-data-dir))))))
     (if multiple
-        (delq nil (mapcar (lambda (s) (cdr (assoc s cands)))
+        (delq nil (mapcar (lambda (s) (devdocs--get-data (car (member s cands))))
                           (completing-read-multiple prompt cands)))
-      (cdr (assoc (completing-read prompt cands nil t) cands)))))
+      (devdocs--get-data
+       (car (member (completing-read prompt cands nil t) cands))))))
 
 ;;;###autoload
 (defun devdocs-delete (doc)
@@ -234,7 +268,7 @@ DOC is a document metadata alist."
     (if (and (file-directory-p dest)
              (file-in-directory-p dest devdocs-data-dir))
         (delete-directory dest t)
-      (user-error "Document `%s' is not installed" (alist-get 'slug doc)))))
+      (user-error "Document \"%s\" is not installed" (devdocs--doc-title doc)))))
 
 ;;;###autoload
 (defun devdocs-install (doc)
@@ -273,7 +307,7 @@ already installed, reinstall it."
                  (file-in-directory-p dest devdocs-data-dir))
         (delete-directory dest t))
       (rename-file (file-name-as-directory temp) dest))
-    (message "Document `%s' installed" slug)))
+    (message "Document \"%s\" installed" (devdocs--doc-title slug))))
 
 ;;;###autoload
 (defun devdocs-update-all ()
@@ -292,7 +326,11 @@ already installed, reinstall it."
                       (devdocs--available-docs)))
               ((y-or-n-p (format "Update %s documents %s?"
                                  (length newer)
-                                 (mapcar (lambda (d) (alist-get 'slug d)) newer)))))
+                                 (string-join
+                                  (mapcar (lambda (d)
+                                            (concat "\"" (devdocs--doc-title d) "\""))
+                                          newer)
+                                  ", ")))))
     (dolist (doc newer)
       (devdocs-install doc))))
 
@@ -651,15 +689,25 @@ fragment part of ENTRY.path."
                           'devdocs--data it))
             entries)))
 
-(defun devdocs--get-data (str)
-  "Get data stored as a string property in STR."
-  (get-text-property 0 'devdocs--data str))
-
-(defun devdocs--annotate (cand)
-  "Return an annotation for `devdocs--read-entry' candidate CAND."
+(defun devdocs--annotate-entry (cand)
+  "Return the documentation location for `devdocs--read-entry' candidate CAND."
   (let-alist (devdocs--get-data cand)
-    (concat " " (propertize " " 'display '(space :align-to 40))
-     (devdocs--doc-title .doc) devdocs-separator .type)))
+    (concat (devdocs--doc-title .doc) devdocs-separator .type)))
+
+(defun devdocs--builtin-annotate-entry (cand)
+  "Return an annotation for `devdocs--read-entry' candidate CAND."
+  (concat devdocs-annotation-separator (devdocs--annotate-entry cand)))
+
+(defun devdocs--marginalia-annotate-entry (cand)
+  "Return a Marginalia annotation for `devdocs--read-entry' candidate CAND."
+  (concat (propertize " " 'marginalia--align t)
+          marginalia-separator
+          (propertize (devdocs--annotate-entry cand)
+                      'face 'marginalia-documentation)))
+
+(with-eval-after-load 'marginalia
+  (add-to-list 'marginalia-annotators
+               '(devdocs-entry devdocs--marginalia-annotate-entry builtin none)))
 
 (defun devdocs--relevant-docs (ask)
   "Return a list of relevant documents for the current buffer.
@@ -677,17 +725,13 @@ choice for this buffer.  If ASK is non-nil, ask unconditionally."
 (defun devdocs--read-entry (prompt documents initial-input)
   "Read the name of an entry in one of the DOCUMENTS, using PROMPT.
 
-INITIAL-INPUT is passed to `completing-read'"
-  (let* ((cands (devdocs--with-cache
+INITIAL-INPUT is passed to `completing-read'."
+  (let* ((completion-extra-properties
+          `( :category devdocs-entry
+             :annotation-function ,#'devdocs--builtin-annotate-entry))
+         (cands (devdocs--with-cache
                  (devdocs--entries documents)))
-         (metadata '(metadata
-                     (category . devdocs)
-                     (annotation-function . devdocs--annotate)))
-         (coll (lambda (string predicate action)
-                 (if (eq action 'metadata)
-                     metadata
-                   (complete-with-action action cands string predicate))))
-         (cand (completing-read prompt coll nil t initial-input
+         (cand (completing-read prompt cands nil t initial-input
                                 'devdocs-history
                                 (thing-at-point 'symbol))))
     (devdocs--get-data (or (car (member cand cands))
