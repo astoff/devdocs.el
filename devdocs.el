@@ -348,7 +348,7 @@ already installed, reinstall it."
 
 (defun devdocs--revert-buffer (&rest _args)
   "Refresh DevDocs buffer."
-  (devdocs--render (pop devdocs--stack)))
+  (devdocs--render (pop devdocs--stack) t))
 
 (defun devdocs-goto-target ()
   "Go to the original position in a DevDocs buffer."
@@ -366,8 +366,9 @@ already installed, reinstall it."
   (interactive)
   (unless (cadr devdocs--stack)
     (user-error "No previous entry"))
+  (setcar devdocs--stack (cons (cons 'saved-point (point)) (car devdocs--stack)))
   (push (pop devdocs--stack) devdocs--forward-stack)
-  (devdocs--render (pop devdocs--stack)))
+  (devdocs--render (pop devdocs--stack) t))
 
 (defun devdocs-go-forward ()
   "Go to the next entry in this DevDocs buffer."
@@ -538,12 +539,13 @@ Interactively, read a page name with completion."
         (url-expander-remove-relative-links ;; undocumented function!
          (concat (file-name-directory base) path))))))
 
-(defun devdocs--render (entry)
+(defun devdocs--render (entry &optional skip-save)
   "Render a DevDocs documentation entry, returning a buffer.
 
 ENTRY is an alist like those in the entry index of the document,
 possibly with an additional ENTRY.fragment which overrides the
-fragment part of ENTRY.path."
+fragment part of ENTRY.path.  If SKIP-SAVE is non-nil, do not
+save the current point into the outgoing stack entry."
   (with-current-buffer (get-buffer-create "*devdocs*")
     (unless (eq major-mode 'devdocs-mode)
       (devdocs-mode))
@@ -559,6 +561,10 @@ fragment part of ENTRY.path."
                                              .doc.slug
                                              (url-hexify-string (devdocs--path-file .path)))
                                      devdocs-data-dir)))
+        (unless skip-save
+          (when devdocs--stack
+            (setcar devdocs--stack
+                    (cons (cons 'saved-point (point)) (car devdocs--stack)))))
         (erase-buffer)
         ;; TODO: cl-progv here for shr settings?
         (shr-insert-document
@@ -571,7 +577,9 @@ fragment part of ENTRY.path."
       (setq-local list-buffers-directory (format-mode-line devdocs-header-line
                                                            nil nil
                                                            (current-buffer)))
-      (devdocs-goto-target)
+      (if .saved-point
+          (goto-char (min .saved-point (point-max)))
+        (devdocs-goto-target))
       (current-buffer))))
 
 (defun devdocs--internal-url-p (url)
