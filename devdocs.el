@@ -276,6 +276,16 @@ already installed, reinstall it."
     (message "Document `%s' installed" slug)))
 
 ;;;###autoload
+(defun devdocs-ensure-docs-installed (desired-docs)
+  "Ensure that every devdoc listed in DESIRED-DOCS is installed, without reinstalling."
+  (let ((installed (mapcar (lambda (installed-doc)
+                             (cdr (assoc 'slug installed-doc)))
+                           (devdocs--installed-docs))))
+    (dolist (desired-doc desired-docs)
+      (unless (cl-member desired-doc installed :test #'string=)
+        (devdocs-install desired-doc)))))
+
+;;;###autoload
 (defun devdocs-update-all ()
   "Reinstall all documents with a new version available."
   (interactive)
