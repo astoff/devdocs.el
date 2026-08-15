@@ -51,6 +51,8 @@ commands:
 
 - =devdocs-install=: Download and install (or reinstall) a document
   distributed by [[https://devdocs.io]].
+- =devdocs-ensure-docs-installed=: Check if documents are already
+  installed and install them if necessary.
 - =devdocs-delete=: Remove an installed document.
 - =devdocs-update-all=: Download and reinstall all installed documents
   for which a newer version is available.
