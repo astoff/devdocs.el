@@ -56,7 +56,7 @@ This variable is normally set by the `devdocs-lookup' command,
 but you may also wish to set it via a hook or as file or
 directory-local variable."
   :local t
-  :type '(list string))
+  :type '(repeat string))
 
 (defcustom devdocs-data-dir (expand-file-name "devdocs" user-emacs-directory)
   "Directory to save documentation files."
