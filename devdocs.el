@@ -5,7 +5,7 @@
 ;; Author: Augusto Stoffel <arstoffel@gmail.com>
 ;; Keywords: help
 ;; URL: https://github.com/astoff/devdocs.el
-;; Package-Requires: ((emacs "27.1") (compat "30.1"))
+;; Package-Requires: ((emacs "28.1") (compat "30.1"))
 ;; Version: 0.7
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -149,17 +149,14 @@ time span specified by `devdocs-cache-timeout'.
 Note that the lexical environment is used to associate BODY to
 its return value; take the necessary precautions."
   `(if-let* ((fun (lambda () ,@body))
-             (funrep ,(if (< emacs-major-version 28) ;; Cf. bug#32503
-                          '(prin1-to-string fun)
-                        'fun))
-             (data (gethash funrep devdocs--cache)))
+             (data (gethash fun devdocs--cache)))
        (prog1 (cdr data)
          (timer-set-time (car data) (time-add nil devdocs-cache-timeout)))
      (let ((val (funcall fun))
            (timer (run-at-time devdocs-cache-timeout nil
-                               #'remhash funrep devdocs--cache)))
+                               #'remhash fun devdocs--cache)))
        (prog1 val
-         (puthash funrep (cons timer val) devdocs--cache)))))
+         (puthash fun (cons timer val) devdocs--cache)))))
 
 ;;; Documentation management
 
@@ -330,15 +327,9 @@ already installed, reinstall it."
 (define-derived-mode devdocs-mode special-mode "DevDocs"
   "Major mode for viewing DevDocs documents."
   :interactive nil
-  (if (boundp 'browse-url-handlers) ;; Emacs ≥ 28
-      (setq-local browse-url-handlers
-                  `((devdocs--internal-url-p . devdocs--internal-url-handler)
-                    ,@browse-url-handlers))
-    (setq-local browse-url-browser-function
-                `(("\\`[^:]+\\'" . devdocs--internal-url-handler)
-                  ,@(if (functionp browse-url-browser-function)
-                        `(("" . ,browse-url-browser-function))
-                      browse-url-browser-function))))
+  (make-local-variable 'browse-url-handlers)
+  (push '(devdocs--internal-url-p . devdocs--internal-url-handler)
+        browse-url-handlers)
   (setq-local
    buffer-undo-list t
    header-line-format devdocs-header-line
